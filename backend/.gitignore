@@ -1,4 +1,39 @@
+# Dependencies
 node_modules/
+.pnp
+.pnp.js
+
+# Build output
 dist/
+
+# Environment files — never commit secrets
 .env
+.env.local
+.env.*.local
+# Allow the template
+!.env.example
+
+# TypeScript
+*.tsbuildinfo
 *.js.map
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+pnpm-debug.log*
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Editor
+.vscode/*
+!.vscode/extensions.json
+.idea/
+*.suo
+*.sw?
+
+# Coverage
+coverage/
