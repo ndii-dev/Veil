@@ -1,29 +1,65 @@
 # ShieldFund Backend
 
-Express.js API backend for the ShieldFund ZK treasury platform. Provides REST endpoints for reading on-chain state from the Soroban contracts, caching campaign metadata, and pre-verifying ZK proofs before they hit the chain.
+![CI](https://github.com/Crowder-Stellar/shieldfund-backend/actions/workflows/ci.yml/badge.svg)
+![Stellar](https://img.shields.io/badge/Stellar-Testnet-blue?logo=stellar)
+![Node](https://img.shields.io/badge/Node.js-20+-339933?logo=nodedotjs)
+![Express](https://img.shields.io/badge/Express-4-black?logo=express)
+
+Express.js REST API for the ShieldFund ZK treasury platform. Reads live state from the Soroban contracts via simulation calls (no signing required), provides Horizon event indexing for transaction history, persists campaign metadata in SQLite, and pre-validates ZK proofs before they hit the chain.
 
 ---
 
-## Tech Stack
+## Live Testnet Contracts
 
-| Layer | Choice |
-|-------|--------|
-| Runtime | Node.js ≥ 20 |
-| Framework | Express 4 |
-| Language | TypeScript 5.8 |
-| Stellar | `@stellar/stellar-sdk` v16 |
-| Security | Helmet, CORS |
-| Logging | Morgan |
-| Dev runner | tsx (watch mode) |
+The backend is pre-configured to read from these testnet contracts:
+
+| Contract | ID |
+|----------|----|
+| Treasury Vault | `CAUWJPC73YLQMSV6X4QPLUVS2UZFE2PMRIQSSCDN62DNN6J76Y5RETIG` |
+| Streaming | `CDU7ZIVQ3UC4K3DHV3NMQGW5UMSYFCKCC6YJKHT4YLNEZJRWL6THE6WQ` |
+| Proof Registry | `CBDLHQQPKC5524CFWPD4HMPTZGWBYQNW3IKGAFH6IAYBU3F2F6AO2332` |
+
+Explorer links: [Stellar Expert (testnet)](https://stellar.expert/explorer/testnet)
 
 ---
 
-## Prerequisites
+## Work Breakdown Structure
 
-| Tool | Version | Install |
-|------|---------|---------|
-| Node.js | ≥ 20 | [nodejs.org](https://nodejs.org) |
-| npm | ≥ 10 | bundled with Node |
+```
+shieldfund-backend
+│
+├── src/config/index.ts
+│   └── Reads all env vars into a typed config object
+│       Port, network, RPC URLs, contract IDs, Pinata keys
+│
+├── src/types/index.ts
+│   └── Shared interfaces: Stream, Proof, VaultStats, Campaign, ApiError
+│
+├── src/services/
+│   ├── stellar.ts          ← Soroban RPC layer
+│   │   ├── simulateRead()  builds + submits simulation txn (no fee, no signing)
+│   │   ├── getVaultBalance()
+│   │   ├── getVaultStats()
+│   │   ├── getContractEvents()   Horizon event indexing
+│   │   ├── getAllStreams()
+│   │   ├── getStreamAccumulated()
+│   │   ├── getAllProofs()
+│   │   └── proofExists()
+│   │
+│   └── db.ts               ← SQLite persistence (better-sqlite3)
+│       ├── campaignDb.upsert()
+│       ├── campaignDb.findById()
+│       └── campaignDb.findAll()
+│
+├── src/routes/
+│   ├── treasury.ts         GET /api/treasury/:contractId/balance|stats|transactions
+│   ├── campaigns.ts        GET|POST /api/campaigns, GET /api/campaigns/:id
+│   ├── proofs.ts           GET /api/proofs, GET /api/proofs/:id, POST /api/proofs/verify
+│   └── streams.ts          GET /api/streams, GET /api/streams/:id/claimable
+│
+└── src/middleware/
+    └── errorHandler.ts     JSON error responses with HTTP status codes
+```
 
 ---
 
@@ -34,216 +70,209 @@ Express.js API backend for the ShieldFund ZK treasury platform. Provides REST en
 git clone https://github.com/Crowder-Stellar/shieldfund-backend.git
 cd shieldfund-backend
 
-# 2. Install dependencies
+# 2. Install
 npm install
 
-# 3. Configure environment
+# 3. Configure (testnet contract IDs already filled in)
 cp .env.example .env
-# Fill in contract IDs (deploy shieldfund-contracts first)
 
-# 4. Start dev server (auto-reloads on save)
+# 4. Start dev server with hot reload
 npm run dev
 # → http://localhost:4000
 ```
 
 ---
 
-## Environment Variables
+## How to Use
 
-Copy `.env.example` to `.env`:
-
-| Variable | Required | Description |
-|----------|----------|-------------|
-| `PORT` | No | Server port (default: `4000`) |
-| `NODE_ENV` | No | `development` or `production` |
-| `STELLAR_NETWORK` | Yes | `testnet` or `mainnet` |
-| `STELLAR_HORIZON_URL` | Yes | Horizon REST API base URL |
-| `STELLAR_RPC_URL` | Yes | Soroban RPC URL |
-| `TREASURY_VAULT_CONTRACT_ID` | Yes | From shieldfund-contracts deploy |
-| `STREAMING_CONTRACT_ID` | Yes | From shieldfund-contracts deploy |
-| `PROOF_REGISTRY_CONTRACT_ID` | Yes | From shieldfund-contracts deploy |
-| `PINATA_API_KEY` | No | For IPFS campaign metadata storage |
-| `PINATA_SECRET_KEY` | No | For IPFS campaign metadata storage |
-
----
-
-## Available Scripts
+### Health check — verify the server is running
 
 ```bash
-npm run dev      # Start dev server with hot reload (tsx watch)
-npm run build    # Compile TypeScript → dist/
-npm run start    # Run compiled output (production)
-npm run lint     # TypeScript type-check (no emit)
-```
-
----
-
-## API Reference
-
-### Health
-
-```
-GET /health
+curl http://localhost:4000/health
 ```
 ```json
 { "status": "ok", "network": "testnet" }
 ```
 
----
+### Read vault stats from the live testnet contract
 
-### Treasury
-
+```bash
+curl http://localhost:4000/api/treasury/default/stats
 ```
-GET /api/treasury/:contractId/balance
-```
-Returns the live USDC balance held by a treasury vault contract.
-
-```json
-{ "contractId": "C...", "balance": "500000000000", "asset": "USDC" }
-```
-
----
-
-```
-GET /api/treasury/:contractId/transactions?limit=20&cursor=
-```
-Paginated transaction history for a vault contract, indexed via Horizon.
-
 ```json
 {
-  "contractId": "C...",
-  "transactions": [ /* ... */ ],
-  "limit": 20,
-  "cursor": null
+  "contractId": "CAUWJPC73YLQMSV6X4QPLUVS2UZFE2PMRIQSSCDN62DNN6J76Y5RETIG",
+  "vaultBalance": "0",
+  "totalRaised": "0",
+  "totalDisbursed": "0"
 }
 ```
 
----
+### Read vault balance (stroops)
 
-### Campaigns
-
+```bash
+curl http://localhost:4000/api/treasury/default/balance
 ```
-GET /api/campaigns
-```
-Lists all campaigns from on-chain contract state.
-
 ```json
-{ "campaigns": [ { "id": "0", "title": "Relief Fund Q3", "goal": "100000000000" } ] }
+{ "contractId": "CAUWJ...", "balance": "100000000", "asset": "USDC" }
 ```
 
----
+### List all payment streams
 
+```bash
+curl http://localhost:4000/api/streams
 ```
-GET /api/campaigns/:id
-```
-Returns a single campaign with its IPFS metadata merged in.
-
----
-
-```
-POST /api/campaigns
-Content-Type: application/json
-
-{
-  "id": "1",
-  "title": "Payroll Fund",
-  "goal": "50000000000",
-  "metadata": { "description": "...", "category": "payroll" }
-}
-```
-Caches campaign metadata (IPFS or database). Returns `201 Created`.
-
----
-
-### Proofs
-
-```
-GET /api/proofs
-```
-Lists all registered ZK proofs from the `proof_registry` contract.
-
-```json
-{
-  "proofs": [
-    {
-      "id": 0,
-      "proofHash": "abcdef...",
-      "publicInputsHash": "123456...",
-      "proofType": "payroll",
-      "timestamp": 1719480000,
-      "submitter": "G..."
-    }
-  ]
-}
-```
-
----
-
-```
-GET /api/proofs/:proofId
-```
-Returns a single proof entry by ID.
-
----
-
-```
-POST /api/proofs/verify
-Content-Type: application/json
-
-{
-  "proof": "<hex-encoded Noir proof>",
-  "publicInputs": ["0x...", "0x..."]
-}
-```
-Off-chain ZK proof pre-verification before submitting on-chain. Returns:
-```json
-{ "valid": true }
-```
-or
-```json
-{ "valid": false, "error": "constraint not satisfied" }
-```
-
----
-
-### Streams
-
-```
-GET /api/streams
-```
-Lists all payment streams from the `streaming` contract.
-
 ```json
 {
   "streams": [
     {
       "id": 0,
-      "recipient": "G...",
-      "flowRatePerSecond": "1929",
-      "startTime": 1719480000,
-      "endTime": 1722072000,
+      "recipient": "GABCD...",
+      "flowRatePerSecond": "19291",
+      "startTime": 1751000000,
+      "endTime": 1753592000,
+      "accumulated": "0",
       "status": "Active"
     }
   ]
 }
 ```
 
----
+### Check claimable balance for a stream
 
+```bash
+curl http://localhost:4000/api/streams/0/claimable
 ```
-GET /api/streams/:streamId
-```
-Returns a single stream record.
-
----
-
-```
-GET /api/streams/:streamId/claimable
-```
-Returns the claimable USDC amount at the current ledger timestamp.
-
 ```json
-{ "streamId": "0", "claimable": "125000000", "asset": "USDC" }
+{ "streamId": "0", "claimable": "12540000", "asset": "USDC" }
+```
+
+### List all on-chain ZK proofs
+
+```bash
+curl http://localhost:4000/api/proofs
+```
+```json
+{
+  "proofs": [
+    {
+      "id": 0,
+      "proofHash": "abcdef12...",
+      "publicInputsHash": "123456ab...",
+      "proofType": "payroll",
+      "timestamp": 1751000100,
+      "submitter": "GBJ5FP..."
+    }
+  ]
+}
+```
+
+### Pre-verify a ZK proof before submitting on-chain
+
+```bash
+curl -X POST http://localhost:4000/api/proofs/verify \
+  -H "Content-Type: application/json" \
+  -d '{
+    "proof": "abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890",
+    "publicInputs": ["0x01", "0x02"]
+  }'
+```
+```json
+{ "valid": false, "message": "Verifier not yet wired up — register proof on-chain directly" }
+```
+
+> The pre-verification endpoint checks for duplicate hashes on-chain first (`409 Conflict` if already registered), then runs the Noir verifier circuit (circuit integration is the next implementation step).
+
+### Cache campaign metadata
+
+```bash
+curl -X POST http://localhost:4000/api/campaigns \
+  -H "Content-Type: application/json" \
+  -d '{
+    "id": "1",
+    "title": "Global Relief Fund Q3",
+    "goal": "500000000000",
+    "metadata": { "description": "Emergency relief disbursements", "category": "relief" }
+  }'
+```
+```json
+{ "id": "1", "status": "created" }
+```
+
+Then fetch it:
+```bash
+curl http://localhost:4000/api/campaigns/1
+```
+
+---
+
+## Full API Reference
+
+### Health
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `GET` | `/health` | Server status + active network |
+
+### Treasury
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `GET` | `/api/treasury/:contractId/balance` | Live token balance (stroops). Use `default` for the configured vault. |
+| `GET` | `/api/treasury/:contractId/stats` | `{ vaultBalance, totalRaised, totalDisbursed }` |
+| `GET` | `/api/treasury/:contractId/transactions?limit=20&cursor=` | Horizon contract event log, paginated |
+
+### Campaigns
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `GET` | `/api/campaigns` | All campaigns from SQLite |
+| `GET` | `/api/campaigns/:id` | Single campaign |
+| `POST` | `/api/campaigns` | Upsert campaign metadata (body: `{ id, title, goal, metadata? }`) |
+
+### Proofs
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `GET` | `/api/proofs` | All registered proofs from proof_registry contract |
+| `GET` | `/api/proofs/:proofId` | Single proof by sequential ID |
+| `POST` | `/api/proofs/verify` | Pre-verify ZK proof (body: `{ proof, publicInputs }`) |
+
+### Streams
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `GET` | `/api/streams` | All streams from streaming contract |
+| `GET` | `/api/streams/:streamId` | Single stream record |
+| `GET` | `/api/streams/:streamId/claimable` | Live claimable amount via simulation call |
+
+---
+
+## Environment Variables
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `PORT` | `4000` | Server port |
+| `NODE_ENV` | `development` | `development` or `production` |
+| `STELLAR_NETWORK` | `testnet` | `testnet` or `mainnet` |
+| `STELLAR_HORIZON_URL` | testnet URL | Horizon REST API |
+| `STELLAR_RPC_URL` | testnet URL | Soroban RPC URL |
+| `TREASURY_VAULT_CONTRACT_ID` | set | Vault contract address |
+| `STREAMING_CONTRACT_ID` | set | Streaming contract address |
+| `PROOF_REGISTRY_CONTRACT_ID` | set | Proof registry contract address |
+| `DB_PATH` | `./data/shieldfund.db` | SQLite file path |
+| `PINATA_API_KEY` | — | Optional IPFS storage |
+| `PINATA_SECRET_KEY` | — | Optional IPFS storage |
+
+---
+
+## Available Scripts
+
+```bash
+npm run dev      # Hot-reload dev server (tsx watch)
+npm run build    # TypeScript → dist/
+npm run start    # Run compiled output (production)
+npm run lint     # Type-check only
 ```
 
 ---
@@ -254,55 +283,68 @@ Returns the claimable USDC amount at the current ledger timestamp.
 shieldfund-backend/
 ├── package.json
 ├── tsconfig.json
-├── .env.example                        # Environment variable template
-├── .gitignore
+├── .env.example                  # Testnet contract IDs pre-filled
+├── .gitignore                    # Excludes node_modules, dist, .env, data/
 │
 └── src/
-    ├── index.ts                        # Express app entry — mounts routers, middleware
+    ├── index.ts                  # Express app — mounts routes, middleware
     │
     ├── config/
-    │   └── index.ts                    # Reads env vars, exports typed config object
-    │
-    ├── services/
-    │   └── stellar.ts                  # Soroban RPC helpers — reads contract state
+    │   └── index.ts              # All env vars → typed config object
     │
     ├── types/
-    │   └── index.ts                    # Shared TypeScript interfaces (Stream, Proof, etc.)
+    │   └── index.ts              # Stream, Proof, VaultStats, Campaign, ApiError
+    │
+    ├── services/
+    │   ├── stellar.ts            # Soroban RPC simulation helpers
+    │   └── db.ts                 # SQLite campaign store (better-sqlite3)
     │
     ├── routes/
-    │   ├── treasury.ts                 # GET /api/treasury/...
-    │   ├── campaigns.ts                # GET|POST /api/campaigns/...
-    │   ├── proofs.ts                   # GET|POST /api/proofs/...
-    │   └── streams.ts                  # GET /api/streams/...
+    │   ├── treasury.ts
+    │   ├── campaigns.ts
+    │   ├── proofs.ts
+    │   └── streams.ts
     │
     └── middleware/
-        └── errorHandler.ts             # Global error handler (status + message JSON)
+        └── errorHandler.ts       # Global error → { error: string } + status code
 ```
 
 ---
 
 ## Error Responses
 
-All errors return JSON with an `error` field:
+All errors return JSON:
 
 ```json
-{ "error": "proof and publicInputs are required" }
+{ "error": "human-readable message" }
 ```
 
-HTTP status codes follow REST conventions: `400` bad request, `404` not found, `500` internal error.
+| Status | When |
+|--------|------|
+| `400` | Missing or invalid request body |
+| `404` | Resource not found |
+| `409` | Duplicate proof hash already registered on-chain |
+| `503` | Contract ID not configured |
+| `500` | Unexpected server error |
 
 ---
 
-## Connecting to Contracts
+## CI / Deploy
 
-1. Deploy from [shieldfund-contracts](https://github.com/Crowder-Stellar/shieldfund-contracts)
-2. Paste the printed contract IDs into `.env`
-3. `src/config/index.ts` reads them and passes them to `src/services/stellar.ts`
-4. The Stellar service uses `@stellar/stellar-sdk` to simulate contract reads via the Soroban RPC
+GitHub Actions on every push and PR:
+- **Type-check** (`tsc --noEmit`) + **build** on every event
+- **Railway deploy** on push to `main` (requires `RAILWAY_TOKEN` secret)
+
+To deploy to Railway manually:
+```bash
+npm install -g @railway/cli
+railway login
+railway up
+```
 
 ---
 
 ## Related Repos
 
 - [shieldfund-frontend](https://github.com/Crowder-Stellar/shieldfund-frontend) — React dashboard
-- [shieldfund-contracts](https://github.com/Crowder-Stellar/shieldfund-contracts) — Soroban smart contracts (deploy first)
+- [shieldfund-contracts](https://github.com/Crowder-Stellar/shieldfund-contracts) — Soroban smart contracts
