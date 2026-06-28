@@ -37,3 +37,6 @@ desktop.ini
 
 # Coverage
 coverage/
+
+# SQLite database
+data/

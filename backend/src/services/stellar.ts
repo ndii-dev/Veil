@@ -1,31 +1,49 @@
-import { SorobanRpc, Contract, nativeToScVal, scValToNative } from '@stellar/stellar-sdk';
+import {
+  SorobanRpc,
+  Contract,
+  TransactionBuilder,
+  Account,
+  Networks,
+  scValToNative,
+  xdr,
+} from '@stellar/stellar-sdk';
 import { config } from '../config/index.js';
 import type { VaultStats, Stream, Proof } from '../types/index.js';
 
-const server = new SorobanRpc.Server(config.stellar.rpcUrl);
+// A stable read-only public key used only for simulation (never signs anything)
+const SIMULATION_SOURCE = 'GAAZI4TCR3TY5OJHCTJC2A4QSY6CJWJH5IAJTGKIN2ER7LBNVKOCCWN';
 
-async function simulateRead(contractId: string, method: string, args: unknown[] = []): Promise<unknown> {
+const server = new SorobanRpc.Server(config.stellar.rpcUrl, { allowHttp: false });
+
+const networkPassphrase =
+  config.stellar.network === 'mainnet'
+    ? Networks.PUBLIC
+    : Networks.TESTNET;
+
+async function simulateRead(contractId: string, method: string, args: xdr.ScVal[] = []): Promise<unknown> {
   const contract = new Contract(contractId);
-  const operation = contract.call(method, ...args.map(a => nativeToScVal(a)));
+  const account = new Account(SIMULATION_SOURCE, '0');
 
-  // Build a minimal transaction for simulation (no source account needed for reads)
-  const { StellarBase } = await import('@stellar/stellar-sdk');
-  const account = new StellarBase.Account('GAAZI4TCR3TY5OJHCTJC2A4QSY6CJWJH5IAJTGKIN2ER7LBNVKOCCWN', '0');
-  const tx = new StellarBase.TransactionBuilder(account, {
+  const tx = new TransactionBuilder(account, {
     fee: '100',
-    networkPassphrase: config.stellar.network === 'mainnet'
-      ? 'Public Global Stellar Network ; September 2015'
-      : 'Test SDF Network ; September 2015',
+    networkPassphrase,
   })
-    .addOperation(operation)
+    .addOperation(contract.call(method, ...args))
     .setTimeout(30)
     .build();
 
   const result = await server.simulateTransaction(tx);
+
   if (SorobanRpc.Api.isSimulationError(result)) {
-    throw new Error(`Simulation failed: ${result.error}`);
+    throw new Error(`Contract simulation failed [${contractId}::${method}]: ${result.error}`);
   }
-  return scValToNative((result as SorobanRpc.Api.SimulateTransactionSuccessResponse).result!.retval);
+
+  const successResult = result as SorobanRpc.Api.SimulateTransactionSuccessResponse;
+  if (!successResult.result) {
+    throw new Error(`No return value from ${contractId}::${method}`);
+  }
+
+  return scValToNative(successResult.result.retval);
 }
 
 export async function getVaultBalance(contractId: string): Promise<string> {
@@ -36,10 +54,32 @@ export async function getVaultBalance(contractId: string): Promise<string> {
 export async function getVaultStats(contractId: string): Promise<VaultStats> {
   const stats = await simulateRead(contractId, 'get_stats') as Record<string, bigint>;
   return {
-    vaultBalance: String(stats.vault_balance),
-    totalRaised: String(stats.total_raised),
-    totalDisbursed: String(stats.total_disbursed),
+    vaultBalance: String(stats.vault_balance ?? 0n),
+    totalRaised: String(stats.total_raised ?? 0n),
+    totalDisbursed: String(stats.total_disbursed ?? 0n),
   };
+}
+
+export async function getContractEvents(contractId: string, limit: number, cursor?: string) {
+  const filters: SorobanRpc.Api.EventFilter[] = [
+    { type: 'contract', contractIds: [contractId] },
+  ];
+
+  const response = await server.getEvents({
+    startLedger: cursor ? undefined : 1,
+    filters,
+    limit,
+    cursor,
+  });
+
+  return response.events.map(e => ({
+    id: e.id,
+    type: e.type,
+    ledger: e.ledger,
+    timestamp: e.ledgerClosedAt,
+    topic: e.topic.map(t => scValToNative(t)),
+    value: scValToNative(e.value),
+  }));
 }
 
 export async function getAllStreams(contractId: string): Promise<Stream[]> {
@@ -57,7 +97,9 @@ export async function getAllStreams(contractId: string): Promise<Stream[]> {
 }
 
 export async function getStreamAccumulated(contractId: string, streamId: number): Promise<string> {
-  const val = await simulateRead(contractId, 'get_accumulated', [streamId]);
+  const { xdr: XdrNs } = await import('@stellar/stellar-sdk');
+  const args = [XdrNs.ScVal.scvU32(streamId)];
+  const val = await simulateRead(contractId, 'get_accumulated', args);
   return String(val);
 }
 
@@ -65,8 +107,8 @@ export async function getAllProofs(contractId: string): Promise<Proof[]> {
   const raw = await simulateRead(contractId, 'get_all_proofs') as Array<Record<string, unknown>>;
   return raw.map(p => ({
     id: Number(p.id),
-    proofHash: String(p.proof_hash),
-    publicInputsHash: String(p.public_inputs_hash),
+    proofHash: Buffer.isBuffer(p.proof_hash) ? (p.proof_hash as Buffer).toString('hex') : String(p.proof_hash),
+    publicInputsHash: Buffer.isBuffer(p.public_inputs_hash) ? (p.public_inputs_hash as Buffer).toString('hex') : String(p.public_inputs_hash),
     proofType: String(p.proof_type) as Proof['proofType'],
     timestamp: Number(p.timestamp),
     submitter: String(p.submitter),
@@ -74,6 +116,9 @@ export async function getAllProofs(contractId: string): Promise<Proof[]> {
 }
 
 export async function proofExists(contractId: string, proofHash: string): Promise<boolean> {
-  const exists = await simulateRead(contractId, 'verify_proof_exists', [proofHash]);
+  const { xdr: XdrNs } = await import('@stellar/stellar-sdk');
+  const hashBytes = Buffer.from(proofHash.replace(/^0x/, ''), 'hex');
+  const args = [XdrNs.ScVal.scvBytes(hashBytes)];
+  const exists = await simulateRead(contractId, 'verify_proof_exists', args);
   return Boolean(exists);
 }
