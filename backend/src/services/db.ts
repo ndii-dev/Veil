@@ -1,16 +1,17 @@
 import Database from 'better-sqlite3';
+import { mkdirSync } from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import type { Campaign } from '../types/index.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const DB_PATH = process.env.DB_PATH ?? path.join(__dirname, '../../data/shieldfund.db');
+export const DB_PATH = process.env.DB_PATH ?? path.join(__dirname, '../../data/shieldfund.db');
 
 // Ensure data directory exists
-import { mkdirSync } from 'fs';
 mkdirSync(path.dirname(DB_PATH), { recursive: true });
 
-const db = new Database(DB_PATH);
+export const db = new Database(DB_PATH);
+db.pragma('journal_mode = WAL');
 
 db.exec(`
   CREATE TABLE IF NOT EXISTS campaigns (
@@ -21,19 +22,22 @@ db.exec(`
   );
 `);
 
+type CampaignRow = { id: string; title: string; goal: string; metadata: string | null };
+
+// Create-only: an existing campaign is never overwritten.
 const insertCampaign = db.prepare<[string, string, string, string | null]>(
-  'INSERT OR REPLACE INTO campaigns (id, title, goal, metadata) VALUES (?, ?, ?, ?)'
+  'INSERT INTO campaigns (id, title, goal, metadata) VALUES (?, ?, ?, ?) ON CONFLICT(id) DO NOTHING'
 );
 
-const getCampaignById = db.prepare<[string], { id: string; title: string; goal: string; metadata: string | null }>(
+const getCampaignById = db.prepare<[string], CampaignRow>(
   'SELECT * FROM campaigns WHERE id = ?'
 );
 
-const getAllCampaigns = db.prepare<[], { id: string; title: string; goal: string; metadata: string | null }>(
+const getAllCampaigns = db.prepare<[], CampaignRow>(
   'SELECT * FROM campaigns ORDER BY rowid DESC'
 );
 
-function rowToCampaign(row: { id: string; title: string; goal: string; metadata: string | null }): Campaign {
+function rowToCampaign(row: CampaignRow): Campaign {
   return {
     id: row.id,
     title: row.title,
@@ -43,13 +47,15 @@ function rowToCampaign(row: { id: string; title: string; goal: string; metadata:
 }
 
 export const campaignDb = {
-  upsert(campaign: Campaign): void {
-    insertCampaign.run(
+  /** Returns false if a campaign with this id already exists. */
+  create(campaign: Campaign): boolean {
+    const result = insertCampaign.run(
       campaign.id,
       campaign.title,
       campaign.goal,
       campaign.metadata ? JSON.stringify(campaign.metadata) : null,
     );
+    return result.changes === 1;
   },
 
   findById(id: string): Campaign | undefined {
@@ -58,6 +64,6 @@ export const campaignDb = {
   },
 
   findAll(): Campaign[] {
-    return (getAllCampaigns.all() as Array<{ id: string; title: string; goal: string; metadata: string | null }>).map(rowToCampaign);
+    return getAllCampaigns.all().map(rowToCampaign);
   },
 };

@@ -5,7 +5,7 @@
 ![Node](https://img.shields.io/badge/Node.js-20+-339933?logo=nodedotjs)
 ![Express](https://img.shields.io/badge/Express-4-black?logo=express)
 
-Express.js REST API for the ShieldFund ZK treasury platform. Reads live state from the Soroban contracts via simulation calls (no signing required), provides Horizon event indexing for transaction history, persists campaign metadata in SQLite, and pre-validates ZK proofs before they hit the chain.
+Express.js REST API for the ShieldFund ZK treasury platform. Reads live state from the Soroban contracts via simulation calls (no signing required), provides Horizon event indexing for transaction history, persists campaign metadata in SQLite, and anchors ZK proofs on-chain: it asks [shieldfund-proof-server](https://github.com/Crowder-Stellar/shieldfund-proof-server) to generate and `bb verify` a proof, then submits `register_proof()` from its own submitter key.
 
 ---
 
@@ -30,7 +30,8 @@ shieldfund-backend
 │
 ├── src/config/index.ts
 │   └── Reads all env vars into a typed config object
-│       Port, network, RPC URLs, contract IDs, Pinata keys
+│       Port, CORS origins, admin key, network, RPC URLs, contract IDs,
+│       proof server URL, submitter key, DB backups, Pinata JWT
 │
 ├── src/types/index.ts
 │   └── Shared interfaces: Stream, Proof, VaultStats, Campaign, ApiError
@@ -44,21 +45,29 @@ shieldfund-backend
 │   │   ├── getAllStreams()
 │   │   ├── getStreamAccumulated()
 │   │   ├── getAllProofs()
-│   │   └── proofExists()
+│   │   ├── proofExists()
+│   │   └── registerProof()  signs register_proof() with the submitter key
+│   │
+│   ├── proofServer.ts      ← client for shieldfund-proof-server POST /api/prove
+│   ├── backup.ts           ← SQLite online snapshots + retention
 │   │
 │   └── db.ts               ← SQLite persistence (better-sqlite3)
-│       ├── campaignDb.upsert()
+│       ├── campaignDb.create()   create-only, never overwrites
 │       ├── campaignDb.findById()
 │       └── campaignDb.findAll()
 │
 ├── src/routes/
 │   ├── treasury.ts         GET /api/treasury/:contractId/balance|stats|transactions
 │   ├── campaigns.ts        GET|POST /api/campaigns, GET /api/campaigns/:id
-│   ├── proofs.ts           GET /api/proofs, GET /api/proofs/:id, POST /api/proofs/verify
+│   ├── proofs.ts           GET /api/proofs, GET /api/proofs/:id, POST /api/proofs (admin)
+│   ├── schemas.ts          zod schemas for every route's params, query, and body
 │   └── streams.ts          GET /api/streams, GET /api/streams/:id/claimable
 │
 └── src/middleware/
-    └── errorHandler.ts     JSON error responses with HTTP status codes
+    ├── errorHandler.ts     JSON error responses with HTTP status codes
+    ├── auth.ts             Bearer ADMIN_API_KEY check for admin write routes
+    ├── rateLimit.ts        Rate limit on every write route
+    └── validate.ts         zod parse → 400 with issue list
 ```
 
 ---
@@ -167,27 +176,52 @@ curl http://localhost:4000/api/proofs
 }
 ```
 
-### Pre-verify a ZK proof before submitting on-chain
+### Generate and anchor a ZK proof (admin)
 
 ```bash
-curl -X POST http://localhost:4000/api/proofs/verify \
+curl -X POST http://localhost:4000/api/proofs \
   -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $ADMIN_API_KEY" \
   -d '{
-    "proof": "abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890",
-    "publicInputs": ["0x01", "0x02"]
+    "recipientId": "42",
+    "amount": "500000",
+    "proofType": "payroll",
+    "allowlist": ["42", "43", "44"],
+    "budgetCap": "1000000",
+    "budgetSalt": "777"
   }'
 ```
 ```json
-{ "valid": false, "message": "Verifier not yet wired up — register proof on-chain directly" }
+{
+  "proofId": 7,
+  "txHash": "3f1c...",
+  "proofType": "payroll",
+  "proofHash": "0x9b2e...",
+  "publicInputsHash": "0x51d0...",
+  "publicInputs": ["0x045c...", "0x2484...", "0x...2a", "0x...7a120", "0x...0"],
+  "merkleRoot": "0x045c...",
+  "budgetCommitment": "0x2484...",
+  "budgetSalt": "777"
+}
 ```
 
-> The pre-verification endpoint checks for duplicate hashes on-chain first (`409 Conflict` if already registered), then runs the Noir verifier circuit (circuit integration is the next implementation step).
+The backend forwards the circuit inputs to the proof server, which only returns a proof after `bb verify`
+accepts it. The backend then checks the hash isn't already registered (`409`) and submits
+`proof_registry.register_proof()` signed by `PROOF_SUBMITTER_SECRET`. Clients never send a proof hash.
+If the circuit rejects the inputs (recipient not on the allowlist, amount over budget) the response is `422`.
+
+> `proof_registry` only accepts submissions from its admin, so the submitter key must be the registry admin
+> (use `transfer_admin` to hand the role to a dedicated key). The server logs a warning at startup if it isn't.
+>
+> The old `POST /api/proofs/verify` stub has been removed. It never verified anything and must not be
+> relied on.
 
 ### Cache campaign metadata
 
 ```bash
 curl -X POST http://localhost:4000/api/campaigns \
   -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $ADMIN_API_KEY" \
   -d '{
     "id": "1",
     "title": "Global Relief Fund Q3",
@@ -228,7 +262,7 @@ curl http://localhost:4000/api/campaigns/1
 |--------|------|-------------|
 | `GET` | `/api/campaigns` | All campaigns from SQLite |
 | `GET` | `/api/campaigns/:id` | Single campaign |
-| `POST` | `/api/campaigns` | Upsert campaign metadata (body: `{ id, title, goal, metadata? }`) |
+| `POST` | `/api/campaigns` | **Admin.** Create campaign metadata (body: `{ id, title, goal, metadata? }`). `409` if the id exists. |
 
 ### Proofs
 
@@ -236,7 +270,7 @@ curl http://localhost:4000/api/campaigns/1
 |--------|------|-------------|
 | `GET` | `/api/proofs` | All registered proofs from proof_registry contract |
 | `GET` | `/api/proofs/:proofId` | Single proof by sequential ID |
-| `POST` | `/api/proofs/verify` | Pre-verify ZK proof (body: `{ proof, publicInputs }`) |
+| `POST` | `/api/proofs` | **Admin.** Prove via proof server, then anchor with `register_proof()` (body: `{ recipientId, amount, proofType, allowlist, budgetCap, budgetSalt? }`) |
 
 ### Streams
 
@@ -260,9 +294,19 @@ curl http://localhost:4000/api/campaigns/1
 | `TREASURY_VAULT_CONTRACT_ID` | set | Vault contract address |
 | `STREAMING_CONTRACT_ID` | set | Streaming contract address |
 | `PROOF_REGISTRY_CONTRACT_ID` | set | Proof registry contract address |
+| `CORS_ORIGINS` | localhost dev ports | Comma-separated allowed frontend origins. **Required in production.** |
+| `TRUST_PROXY` | `0` | Reverse-proxy hops in front of the app (e.g. `1` on Railway) so rate limits use the real client IP |
+| `ADMIN_API_KEY` | — | Bearer token for admin write routes. Unset = those routes return `503`. |
+| `WRITE_RATE_LIMIT_WINDOW_MS` | `900000` | Rate-limit window for write routes |
+| `WRITE_RATE_LIMIT_MAX` | `30` | Max write requests per IP per window |
+| `PROOF_SERVER_URL` | `http://localhost:4100` | shieldfund-proof-server base URL |
+| `PROOF_SERVER_TIMEOUT_MS` | `120000` | Timeout for proof generation |
+| `PROOF_SUBMITTER_SECRET` | — | Secret seed of the dedicated key that signs `register_proof()`; must be the registry admin |
 | `DB_PATH` | `./data/shieldfund.db` | SQLite file path |
-| `PINATA_API_KEY` | — | Optional IPFS storage |
-| `PINATA_SECRET_KEY` | — | Optional IPFS storage |
+| `DB_BACKUP_DIR` | — | Directory for periodic SQLite snapshots. Unset = no automatic backups. |
+| `DB_BACKUP_INTERVAL_MINUTES` | `60` | Snapshot interval |
+| `DB_BACKUP_KEEP` | `48` | Snapshots to retain |
+| `PINATA_JWT` | — | Optional. Scoped Pinata JWT with pin-only permissions. Server-side only. |
 
 ---
 
@@ -273,6 +317,7 @@ npm run dev      # Hot-reload dev server (tsx watch)
 npm run build    # TypeScript → dist/
 npm run start    # Run compiled output (production)
 npm run lint     # Type-check only
+npm run db:backup [dir]   # One-off SQLite snapshot (default: $DB_BACKUP_DIR or ./backups)
 ```
 
 ---
@@ -296,17 +341,26 @@ shieldfund-backend/
     │   └── index.ts              # Stream, Proof, VaultStats, Campaign, ApiError
     │
     ├── services/
-    │   ├── stellar.ts            # Soroban RPC simulation helpers
+    │   ├── stellar.ts            # Soroban RPC reads + register_proof() submission
+    │   ├── proofServer.ts        # shieldfund-proof-server client
+    │   ├── backup.ts             # SQLite snapshots
     │   └── db.ts                 # SQLite campaign store (better-sqlite3)
     │
     ├── routes/
     │   ├── treasury.ts
     │   ├── campaigns.ts
     │   ├── proofs.ts
-    │   └── streams.ts
+    │   ├── streams.ts
+    │   └── schemas.ts            # zod request schemas
+    │
+    ├── scripts/
+    │   └── backupDb.ts           # npm run db:backup
     │
     └── middleware/
-        └── errorHandler.ts       # Global error → { error: string } + status code
+        ├── errorHandler.ts       # Global error → { error: string } + status code
+        ├── auth.ts               # Admin bearer token
+        ├── rateLimit.ts          # Write-route rate limiting
+        └── validate.ts           # zod → 400
 ```
 
 ---
@@ -321,10 +375,14 @@ All errors return JSON:
 
 | Status | When |
 |--------|------|
-| `400` | Missing or invalid request body |
+| `400` | Invalid params, query, or body (`details` lists each zod issue) |
+| `401` | Missing or wrong admin bearer token |
 | `404` | Resource not found |
-| `409` | Duplicate proof hash already registered on-chain |
-| `503` | Contract ID not configured |
+| `409` | Campaign id already exists, or proof hash already registered on-chain |
+| `422` | Proof server's circuit rejected the inputs |
+| `429` | Write rate limit exceeded |
+| `502` | Proof server unreachable or returned an invalid response |
+| `503` | Contract ID, admin key, or submitter key not configured |
 | `500` | Unexpected server error |
 
 ---
@@ -334,6 +392,16 @@ All errors return JSON:
 GitHub Actions on every push and PR:
 - **Type-check** (`tsc --noEmit`) + **build** on every event
 - **Railway deploy** on push to `main` (requires `RAILWAY_TOKEN` secret)
+
+### Before hosting
+
+- **Persist the database.** `data/shieldfund.db` lives on the container's filesystem, which Railway
+  wipes on every deploy. Either mount a Railway volume and point `DB_PATH` and `DB_BACKUP_DIR` at it, or
+  move to a managed database (Postgres). The backups should go to separate storage from the DB itself.
+- **Set** `NODE_ENV=production`, `CORS_ORIGINS`, `TRUST_PROXY=1`, `ADMIN_API_KEY`, and `PROOF_SUBMITTER_SECRET`
+  as Railway variables. Never commit them.
+- **Pinata:** use a scoped JWT that can only pin (`pinFileToIPFS`, `pinJSONToIPFS`), not an
+  unrestricted API key/secret pair.
 
 To deploy to Railway manually:
 ```bash
@@ -348,3 +416,4 @@ railway up
 
 - [shieldfund-frontend](https://github.com/Crowder-Stellar/shieldfund-frontend) — React dashboard
 - [shieldfund-contracts](https://github.com/Crowder-Stellar/shieldfund-contracts) — Soroban smart contracts
+- [shieldfund-proof-server](https://github.com/Crowder-Stellar/shieldfund-proof-server) — Noir proof generation + `bb verify`

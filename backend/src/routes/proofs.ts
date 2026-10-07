@@ -1,12 +1,18 @@
 import { Router } from 'express';
+import { z } from 'zod';
 import { config } from '../config/index.js';
-import { getAllProofs, proofExists } from '../services/stellar.js';
+import { requireAdmin } from '../middleware/auth.js';
+import { parse } from '../middleware/validate.js';
+import { proveWithProofServer } from '../services/proofServer.js';
+import { getAllProofs, proofExists, registerProof } from '../services/stellar.js';
+import { anchorProofBody, proofIdParam } from './schemas.js';
 
 export const proofsRouter = Router();
 
 // GET /api/proofs
-proofsRouter.get('/', async (_req, res, next) => {
+proofsRouter.get('/', async (req, res, next) => {
   try {
+    parse(z.object({}).strict(), req.query);
     if (!config.contracts.proofRegistry) {
       res.status(503).json({ error: 'PROOF_REGISTRY_CONTRACT_ID not configured' });
       return;
@@ -21,13 +27,13 @@ proofsRouter.get('/', async (_req, res, next) => {
 // GET /api/proofs/:proofId
 proofsRouter.get('/:proofId', async (req, res, next) => {
   try {
+    const { proofId } = parse(proofIdParam, req.params);
     if (!config.contracts.proofRegistry) {
       res.status(503).json({ error: 'PROOF_REGISTRY_CONTRACT_ID not configured' });
       return;
     }
-    const { proofId } = req.params;
     const proofs = await getAllProofs(config.contracts.proofRegistry);
-    const proof = proofs.find(p => p.id === Number(proofId));
+    const proof = proofs.find(p => p.id === proofId);
 
     if (!proof) {
       res.status(404).json({ error: `Proof ${proofId} not found` });
@@ -39,28 +45,45 @@ proofsRouter.get('/:proofId', async (req, res, next) => {
   }
 });
 
-// POST /api/proofs/verify — off-chain ZK proof pre-verification before submitting on-chain
-proofsRouter.post('/verify', async (req, res, next) => {
+// POST /api/proofs — admin-only. Generates a proof on the proof server (which
+// `bb verify`s it before returning), then anchors its hash on-chain via
+// register_proof() signed by the backend's submitter key. The caller supplies
+// circuit inputs only — a proof hash is never accepted from the client.
+proofsRouter.post('/', requireAdmin, async (req, res, next) => {
   try {
-    const { proof, publicInputs } = req.body as { proof?: string; publicInputs?: string[] };
-
-    if (!proof || !Array.isArray(publicInputs) || publicInputs.length === 0) {
-      res.status(400).json({ error: 'proof (string) and publicInputs (string[]) are required' });
+    const input = parse(anchorProofBody, req.body);
+    const registry = config.contracts.proofRegistry;
+    if (!registry) {
+      res.status(503).json({ error: 'PROOF_REGISTRY_CONTRACT_ID not configured' });
       return;
     }
 
-    // Check if this proof hash is already registered on-chain
-    if (config.contracts.proofRegistry) {
-      const alreadyExists = await proofExists(config.contracts.proofRegistry, proof);
-      if (alreadyExists) {
-        res.status(409).json({ error: 'This proof hash is already registered on-chain' });
-        return;
-      }
+    const proof = await proveWithProofServer(input);
+
+    if (await proofExists(registry, proof.proofHash)) {
+      res.status(409).json({ error: 'This proof hash is already registered on-chain', proofHash: proof.proofHash });
+      return;
     }
 
-    // TODO: run Noir verifier circuit against proof + publicInputs
-    // e.g. import { verify } from '@noir-lang/backend_barretenberg';
-    res.json({ valid: false, message: 'Verifier not yet wired up — register proof on-chain directly' });
+    const { proofId, txHash } = await registerProof(
+      registry,
+      proof.proofHash,
+      proof.publicInputsHash,
+      proof.proofType,
+    );
+
+    res.status(201).json({
+      proofId,
+      txHash,
+      proofType: proof.proofType,
+      proofHash: proof.proofHash,
+      publicInputsHash: proof.publicInputsHash,
+      publicInputs: proof.publicInputs,
+      merkleRoot: proof.merkleRoot,
+      budgetCommitment: proof.budgetCommitment,
+      // Needed to reproduce the same budget_commitment for later proofs.
+      budgetSalt: proof.budgetSalt,
+    });
   } catch (err) {
     next(err);
   }
