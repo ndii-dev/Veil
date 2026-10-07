@@ -40,3 +40,4 @@ coverage/
 
 # SQLite database
 data/
+backups/
