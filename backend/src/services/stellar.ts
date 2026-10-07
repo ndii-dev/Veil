@@ -92,9 +92,95 @@ export async function getContractEvents(contractId: string, limit: number, curso
   }));
 }
 
-export async function getAllStreams(contractId: string): Promise<Stream[]> {
-  const raw = await simulateRead(contractId, 'get_all_streams') as Array<Record<string, unknown>>;
-  return raw.map(s => ({
+// ── Paginated reads ───────────────────────────────────────────────────────────
+// Current contracts expose get_*_count + get_*(start, limit) + get_proof/
+// get_stream(id) with typed errors. The contracts still deployed on testnet
+// predate that, so each contract's capability is probed once and the old
+// whole-vector getters are used only as a fallback.
+
+/** Largest page the contracts return per call (MAX_PAGE_SIZE). */
+export const CONTRACT_PAGE_SIZE = 50;
+
+export interface Page<T> {
+  items: T[];
+  total: number;
+}
+
+const paginatedSupport = new Map<string, boolean>();
+
+const isMissingFunction = (err: unknown) => /Error\(WasmVm, MissingValue\)/.test(String((err as Error)?.message ?? err));
+const isContractError = (err: unknown, code: number) =>
+  String((err as Error)?.message ?? err).includes(`Error(Contract, #${code})`);
+
+/** Returns the item count, or null if this contract predates pagination. */
+async function countOrLegacy(contractId: string, countMethod: string): Promise<number | null> {
+  if (paginatedSupport.get(contractId) === false) return null;
+  try {
+    const count = Number(await simulateRead(contractId, countMethod));
+    paginatedSupport.set(contractId, true);
+    return count;
+  } catch (err) {
+    if (!isMissingFunction(err)) throw err;
+    paginatedSupport.set(contractId, false);
+    return null;
+  }
+}
+
+async function readPage<T>(
+  contractId: string,
+  methods: { count: string; page: string; all: string },
+  map: (raw: Record<string, unknown>) => T,
+  start: number,
+  limit: number,
+): Promise<Page<T>> {
+  const total = await countOrLegacy(contractId, methods.count);
+  if (total === null) {
+    const all = (await simulateRead(contractId, methods.all) as Array<Record<string, unknown>>).map(map);
+    return { items: all.slice(start, start + limit), total: all.length };
+  }
+  if (start >= total) return { items: [], total };
+
+  const items: T[] = [];
+  for (let offset = start; offset < Math.min(start + limit, total); offset += CONTRACT_PAGE_SIZE) {
+    const size = Math.min(CONTRACT_PAGE_SIZE, start + limit - offset);
+    const raw = await simulateRead(contractId, methods.page, [
+      xdr.ScVal.scvU32(offset),
+      xdr.ScVal.scvU32(size),
+    ]) as Array<Record<string, unknown>>;
+    items.push(...raw.map(map));
+  }
+  return { items, total };
+}
+
+/** Reads one item by id; null when it doesn't exist. */
+async function readOne<T>(
+  contractId: string,
+  methods: { count: string; one: string; all: string },
+  notFoundCode: number,
+  map: (raw: Record<string, unknown>) => T & { id: number },
+  id: number,
+): Promise<T | null> {
+  const total = await countOrLegacy(contractId, methods.count);
+  if (total === null) {
+    // Legacy contracts trap with a generic error on a missing id, so scan.
+    const all = (await simulateRead(contractId, methods.all) as Array<Record<string, unknown>>).map(map);
+    return all.find(item => item.id === id) ?? null;
+  }
+  try {
+    return map(await simulateRead(contractId, methods.one, [xdr.ScVal.scvU32(id)]) as Record<string, unknown>);
+  } catch (err) {
+    if (isContractError(err, notFoundCode)) return null;
+    throw err;
+  }
+}
+
+const STREAM_METHODS = { count: 'get_stream_count', page: 'get_streams', one: 'get_stream', all: 'get_all_streams' };
+const PROOF_METHODS = { count: 'get_proof_count', page: 'get_proofs', one: 'get_proof', all: 'get_all_proofs' };
+const STREAM_NOT_FOUND = 4; // streaming::Error::StreamNotFound
+const PROOF_NOT_FOUND = 3;  // proof_registry::Error::ProofNotFound
+
+function toStream(s: Record<string, unknown>): Stream {
+  return {
     id: Number(s.id),
     recipient: String(s.recipient),
     flowRatePerSecond: String(s.flow_rate_per_second),
@@ -103,8 +189,14 @@ export async function getAllStreams(contractId: string): Promise<Stream[]> {
     accumulated: String(s.accumulated),
     lastUpdate: Number(s.last_update),
     status: String(s.status) as Stream['status'],
-  }));
+  };
 }
+
+export const getStreams = (contractId: string, start: number, limit: number) =>
+  readPage(contractId, STREAM_METHODS, toStream, start, limit);
+
+export const getStream = (contractId: string, streamId: number) =>
+  readOne(contractId, STREAM_METHODS, STREAM_NOT_FOUND, toStream, streamId);
 
 export async function getStreamAccumulated(contractId: string, streamId: number): Promise<string> {
   const args = [xdr.ScVal.scvU32(streamId)];
@@ -112,17 +204,22 @@ export async function getStreamAccumulated(contractId: string, streamId: number)
   return String(val);
 }
 
-export async function getAllProofs(contractId: string): Promise<Proof[]> {
-  const raw = await simulateRead(contractId, 'get_all_proofs') as Array<Record<string, unknown>>;
-  return raw.map(p => ({
+function toProof(p: Record<string, unknown>): Proof {
+  return {
     id: Number(p.id),
     proofHash: Buffer.isBuffer(p.proof_hash) ? (p.proof_hash as Buffer).toString('hex') : String(p.proof_hash),
     publicInputsHash: Buffer.isBuffer(p.public_inputs_hash) ? (p.public_inputs_hash as Buffer).toString('hex') : String(p.public_inputs_hash),
     proofType: String(p.proof_type) as Proof['proofType'],
     timestamp: Number(p.timestamp),
     submitter: String(p.submitter),
-  }));
+  };
 }
+
+export const getProofs = (contractId: string, start: number, limit: number) =>
+  readPage(contractId, PROOF_METHODS, toProof, start, limit);
+
+export const getProof = (contractId: string, proofId: number) =>
+  readOne(contractId, PROOF_METHODS, PROOF_NOT_FOUND, toProof, proofId);
 
 export async function proofExists(contractId: string, proofHash: string): Promise<boolean> {
   const args = [xdr.ScVal.scvBytes(hexToBytes32(proofHash))];

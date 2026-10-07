@@ -42,9 +42,9 @@ shieldfund-backend
 │   │   ├── getVaultBalance()
 │   │   ├── getVaultStats()
 │   │   ├── getContractEvents()   Horizon event indexing
-│   │   ├── getAllStreams()
+│   │   ├── getStreams() / getStream()   paginated + direct reads
 │   │   ├── getStreamAccumulated()
-│   │   ├── getAllProofs()
+│   │   ├── getProofs() / getProof()     paginated + direct reads
 │   │   ├── proofExists()
 │   │   └── registerProof()  signs register_proof() with the submitter key
 │   │
@@ -268,18 +268,23 @@ curl http://localhost:4000/api/campaigns/1
 
 | Method | Path | Description |
 |--------|------|-------------|
-| `GET` | `/api/proofs` | All registered proofs from proof_registry contract |
-| `GET` | `/api/proofs/:proofId` | Single proof by sequential ID |
+| `GET` | `/api/proofs?start=0&limit=50` | Page of registered proofs (`limit` 1–100) → `{ proofs, total, start, limit }` |
+| `GET` | `/api/proofs/:proofId` | Single proof by sequential ID (direct `get_proof` lookup) |
 | `POST` | `/api/proofs` | **Admin.** Prove via proof server, then anchor with `register_proof()` (body: `{ recipientId, amount, proofType, allowlist, budgetCap, budgetSalt? }`) |
 
 ### Streams
 
 | Method | Path | Description |
 |--------|------|-------------|
-| `GET` | `/api/streams` | All streams from streaming contract |
-| `GET` | `/api/streams/:streamId` | Single stream record |
+| `GET` | `/api/streams?start=0&limit=50` | Page of streams (`limit` 1–100) → `{ streams, total, start, limit }` |
+| `GET` | `/api/streams/:streamId` | Single stream record (direct `get_stream` lookup) |
 | `GET` | `/api/streams/:streamId/claimable` | Live claimable amount via simulation call |
 
+
+List endpoints use the contracts' paginated `get_*_count` / `get_proofs` / `get_streams(start, limit)` reads,
+and single-item endpoints call `get_proof` / `get_stream` directly instead of downloading every record.
+Contracts deployed before pagination existed are detected once (missing `get_*_count`) and fall back to the
+old `get_all_*` getters, so the API behaves the same against either deployment.
 ---
 
 ## Environment Variables
