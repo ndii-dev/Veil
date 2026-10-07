@@ -322,6 +322,7 @@ npm run dev      # Hot-reload dev server (tsx watch)
 npm run build    # TypeScript → dist/
 npm run start    # Run compiled output (production)
 npm run lint     # Type-check only
+npm test         # API test suite (vitest + supertest; Stellar & proof server mocked)
 npm run db:backup [dir]   # One-off SQLite snapshot (default: $DB_BACKUP_DIR or ./backups)
 ```
 
@@ -337,7 +338,8 @@ shieldfund-backend/
 ├── .gitignore                    # Excludes node_modules, dist, .env, data/
 │
 └── src/
-    ├── index.ts                  # Express app — mounts routes, middleware
+    ├── app.ts                    # Express app — mounts routes, middleware (no listen)
+    ├── index.ts                  # Entrypoint — listens, starts backups
     │
     ├── config/
     │   └── index.ts              # All env vars → typed config object
@@ -395,7 +397,7 @@ All errors return JSON:
 ## CI / Deploy
 
 GitHub Actions on every push and PR:
-- **Type-check** (`tsc --noEmit`) + **build** on every event
+- **Type-check** (`tsc --noEmit`), **tests** (`npm test`) + **build** on every event
 - **Railway deploy** on push to `main` (requires `RAILWAY_TOKEN` secret)
 
 ### Before hosting
