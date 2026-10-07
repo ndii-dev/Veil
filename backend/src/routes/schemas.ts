@@ -14,6 +14,12 @@ export const streamIdParam = z.object({ streamId: u32 });
 export const proofIdParam = z.object({ proofId: u32 });
 export const campaignIdParam = z.object({ id: z.string().min(1).max(128) });
 
+// ?start=&limit= for list endpoints backed by paginated contract reads.
+export const pageQuery = z.object({
+  start: z.coerce.number().int().min(0).max(0xffffffff).default(0),
+  limit: z.coerce.number().int().min(1).max(100).default(50),
+}).strict();
+
 export const transactionsQuery = z.object({
   limit: z.coerce.number().int().min(1).max(100).default(20),
   cursor: z.string().min(1).max(256).optional(),

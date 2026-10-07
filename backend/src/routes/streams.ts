@@ -1,22 +1,21 @@
 import { Router } from 'express';
-import { z } from 'zod';
 import { config } from '../config/index.js';
 import { parse } from '../middleware/validate.js';
-import { getAllStreams, getStreamAccumulated } from '../services/stellar.js';
-import { streamIdParam } from './schemas.js';
+import { getStream, getStreamAccumulated, getStreams } from '../services/stellar.js';
+import { pageQuery, streamIdParam } from './schemas.js';
 
 export const streamsRouter = Router();
 
-// GET /api/streams
+// GET /api/streams?start=0&limit=50
 streamsRouter.get('/', async (req, res, next) => {
   try {
-    parse(z.object({}).strict(), req.query);
+    const { start, limit } = parse(pageQuery, req.query);
     if (!config.contracts.streaming) {
       res.status(503).json({ error: 'STREAMING_CONTRACT_ID not configured' });
       return;
     }
-    const streams = await getAllStreams(config.contracts.streaming);
-    res.json({ streams });
+    const { items, total } = await getStreams(config.contracts.streaming, start, limit);
+    res.json({ streams: items, total, start, limit });
   } catch (err) {
     next(err);
   }
@@ -30,8 +29,7 @@ streamsRouter.get('/:streamId', async (req, res, next) => {
       res.status(503).json({ error: 'STREAMING_CONTRACT_ID not configured' });
       return;
     }
-    const streams = await getAllStreams(config.contracts.streaming);
-    const stream = streams.find(s => s.id === streamId);
+    const stream = await getStream(config.contracts.streaming, streamId);
 
     if (!stream) {
       res.status(404).json({ error: `Stream ${streamId} not found` });
