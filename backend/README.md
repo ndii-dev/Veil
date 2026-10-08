@@ -210,6 +210,10 @@ accepts it. The backend then checks the hash isn't already registered (`409`) an
 `proof_registry.register_proof()` signed by `PROOF_SUBMITTER_SECRET`. Clients never send a proof hash.
 If the circuit rejects the inputs (recipient not on the allowlist, amount over budget) the response is `422`.
 
+> Submissions are serialized in-process, because they all spend from the one submitter account's sequence
+> number and concurrent ones would be rejected (`TRY_AGAIN_LATER` / `txBadSeq`). If you run several backend
+> replicas, give each its own submitter key or route anchoring through one instance.
+>
 > `proof_registry` only accepts submissions from its admin, so the submitter key must be the registry admin
 > (use `transfer_admin` to hand the role to a dedicated key). The server logs a warning at startup if it isn't.
 >

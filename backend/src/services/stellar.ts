@@ -12,6 +12,7 @@ import {
   xdr,
 } from '@stellar/stellar-sdk';
 import { config } from '../config/index.js';
+import { HttpError } from '../middleware/errorHandler.js';
 import type { VaultStats, Stream, Proof, ProofType } from '../types/index.js';
 
 // Source account for read-only simulations. Simulation doesn't require the
@@ -236,11 +237,37 @@ function submitterKeypair(): Keypair {
   return Keypair.fromSecret(config.proofs.submitterSecret);
 }
 
+// One submitter account means one sequence number: concurrent submissions
+// would all build on the same sequence and all but one would be rejected
+// (txBadSeq). Run them one at a time. This only covers a single backend
+// process — multiple replicas need separate submitter keys or a shared queue.
+let submissionQueue: Promise<unknown> = Promise.resolve();
+
+function serialized<T>(task: () => Promise<T>): Promise<T> {
+  const run = submissionQueue.then(task, task);
+  submissionQueue = run.catch(() => undefined);
+  return run;
+}
+
+// proof_registry::Error codes (see shieldfund-contracts README → Errors).
+const REGISTRY_NOT_ADMIN = 1;
+const REGISTRY_ALREADY_REGISTERED = 2;
+
 /**
  * Signs and submits proof_registry::register_proof() from the backend's
  * dedicated submitter key, waits for the result, and returns the proof id.
+ * Submissions are serialized so they never race on the account sequence.
  */
-export async function registerProof(
+export function registerProof(
+  contractId: string,
+  proofHash: string,
+  publicInputsHash: string,
+  proofType: ProofType,
+): Promise<{ proofId: number; txHash: string }> {
+  return serialized(() => submitRegisterProof(contractId, proofHash, publicInputsHash, proofType));
+}
+
+async function submitRegisterProof(
   contractId: string,
   proofHash: string,
   publicInputsHash: string,
@@ -261,8 +288,21 @@ export async function registerProof(
     .setTimeout(60)
     .build();
 
-  // Simulates, attaches the auth entry and resource footprint/fee.
-  const prepared = await server.prepareTransaction(tx);
+  // Simulates, attaches the auth entry and resource footprint/fee. Typed
+  // contract errors surface here, before anything is submitted.
+  let prepared: Awaited<ReturnType<typeof server.prepareTransaction>>;
+  try {
+    prepared = await server.prepareTransaction(tx);
+  } catch (err) {
+    const message = String((err as Error)?.message ?? err);
+    if (message.includes(`Error(Contract, #${REGISTRY_ALREADY_REGISTERED})`)) {
+      throw new HttpError(409, 'This proof hash is already registered on-chain');
+    }
+    if (message.includes(`Error(Contract, #${REGISTRY_NOT_ADMIN})`)) {
+      throw new HttpError(503, 'Submitter key is not the proof_registry admin');
+    }
+    throw err;
+  }
   prepared.sign(keypair);
 
   const sent = await server.sendTransaction(prepared);
