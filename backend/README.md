@@ -404,6 +404,18 @@ All errors return JSON:
 
 ---
 
+## Docker
+
+```bash
+docker build -t veil-backend .
+docker run -p 4000:4000 -v veil-data:/data --env-file .env veil-backend
+```
+
+The image runs as the non-root `node` user, keeps SQLite on the `/data` volume (`DB_PATH=/data/shieldfund.db`),
+and has a `/health` healthcheck. SIGTERM triggers a graceful shutdown.
+
+---
+
 ## CI / Deploy
 
 GitHub Actions on every push and PR:

@@ -53,3 +53,13 @@ updates:
     groups:
       minor-and-patch:
         update-types: ["minor", "patch"]
+
+  # Bumps the digest-pinned Node base image in the backend Dockerfile.
+  - package-ecosystem: "docker"
+    directory: "/backend"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 5
+    groups:
+      minor-and-patch:
+        update-types: ["minor", "patch"]
