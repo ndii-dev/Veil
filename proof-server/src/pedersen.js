@@ -7,9 +7,14 @@ const { toFieldHex } = require("./hash");
 // matches what payroll_compliance recomputes — test/pedersen.test.js checks
 // that against the hash_util circuit. ~1ms per hash instead of ~1s per
 // `nargo execute` subprocess.
+// A failed load is not cached, so the next request retries instead of every
+// later proof failing until restart (same as loadCircuit in prover.js).
 let instance;
 function barretenberg() {
-  instance ??= BarretenbergSync.new({ backend: BackendType.Wasm });
+  instance ??= BarretenbergSync.new({ backend: BackendType.Wasm }).catch((err) => {
+    instance = undefined;
+    throw err;
+  });
   return instance;
 }
 
