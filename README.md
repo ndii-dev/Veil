@@ -158,7 +158,7 @@ The backend runs on `http://localhost:4000`. Full reference: [backend/README.md]
 | Tool | Version | Needed for |
 |------|---------|-----------|
 | Node.js | 22 LTS | backend, proof-server |
-| Rust + `wasm32-unknown-unknown` | stable | contracts |
+| Rust + `wasm32v1-none` | stable | contracts |
 | `nargo` (Noir) | `1.0.0-beta.22` | proof-server |
 | `bb` (Barretenberg) | `5.0.0-nightly.20260522` | proof-server |
 
@@ -174,7 +174,7 @@ cd Veil
 # 1. Contracts: run the tests and build the WASM
 cd contracts
 cargo test --workspace
-cargo build --target wasm32-unknown-unknown --release
+cargo build --target wasm32v1-none --release
 cd ..
 
 # 2. Proof server → http://localhost:4100
@@ -207,7 +207,7 @@ curl http://localhost:4000/api/treasury/default/stats
 | Install | — | `npm ci` | `npm ci` |
 | Test | `cargo test --workspace` | `npm test` | `npm test` |
 | Lint | `cargo clippy` | `npm run lint` | `npm run lint` |
-| Build | `cargo build --target wasm32-unknown-unknown --release` | `npm run build` | — |
+| Build | `cargo build --target wasm32v1-none --release` | `npm run build` | — |
 
 - **CI runs per package.** A change under `backend/` runs only the backend workflow, and so on.
 - **Dependabot** keeps npm, Cargo, Docker and GitHub Actions dependencies up to date for each package.
