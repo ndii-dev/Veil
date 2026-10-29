@@ -36,7 +36,7 @@ jobs:
       - name: Install Rust
         uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master
         with:
-          toolchain: stable
+          toolchain: "1.96.0"
           targets: wasm32v1-none
 
       - name: Cache Cargo registry
@@ -63,7 +63,7 @@ jobs:
       - name: Install Rust + wasm32v1-none target
         uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master
         with:
-          toolchain: stable
+          toolchain: "1.96.0"
           targets: wasm32v1-none
 
       - name: Cache Cargo registry

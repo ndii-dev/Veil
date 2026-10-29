@@ -1,0 +1,6 @@
+# Pinned so CI and local builds produce the same WASM bytes, which is what
+# lets anyone check a deployed contract against this source.
+[toolchain]
+channel = "1.96.0"
+targets = ["wasm32v1-none"]
+components = ["clippy", "rustfmt"]
