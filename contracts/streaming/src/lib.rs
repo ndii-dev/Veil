@@ -90,6 +90,49 @@ fn admin(env: &Env) -> Address {
     env.storage().instance().get(&DataKey::Admin).unwrap()
 }
 
+// ── Storage TTL ───────────────────────────────────────────────────────────────
+// Soroban archives entries whose TTL runs out, and calls that touch them then
+// fail until someone restores them. Every state-changing call extends the
+// contract instance and the persistent entries it writes; a stream's own
+// entries are kept alive at least until its end_time.
+
+/// Ledgers per day at ~5s per ledger.
+const DAY_IN_LEDGERS: u32 = 17_280;
+const SECONDS_PER_LEDGER: u64 = 5;
+pub(crate) const INSTANCE_TTL_EXTEND: u32 = 30 * DAY_IN_LEDGERS;
+const INSTANCE_TTL_THRESHOLD: u32 = INSTANCE_TTL_EXTEND - DAY_IN_LEDGERS;
+pub(crate) const PERSISTENT_TTL_EXTEND: u32 = 90 * DAY_IN_LEDGERS;
+
+fn bump_instance(env: &Env) {
+    env.storage()
+        .instance()
+        .extend_ttl(INSTANCE_TTL_THRESHOLD, INSTANCE_TTL_EXTEND);
+}
+
+/// Extends `key` to at least `ledgers` from now (capped at the network max).
+fn bump_persistent_for(env: &Env, key: &DataKey, ledgers: u32) {
+    let extend_to = ledgers.max(PERSISTENT_TTL_EXTEND).min(env.storage().max_ttl());
+    env.storage()
+        .persistent()
+        .extend_ttl(key, extend_to.saturating_sub(DAY_IN_LEDGERS), extend_to);
+}
+
+fn bump_persistent(env: &Env, key: &DataKey) {
+    bump_persistent_for(env, key, PERSISTENT_TTL_EXTEND);
+}
+
+/// Keeps a stream's record and reservation alive past its end_time, plus a
+/// 30-day grace period for the recipient to withdraw.
+fn bump_stream(env: &Env, stream: &Stream) {
+    let remaining = stream.end_time.saturating_sub(env.ledger().timestamp()) / SECONDS_PER_LEDGER;
+    let ledgers = u32::try_from(remaining).unwrap_or(u32::MAX).saturating_add(30 * DAY_IN_LEDGERS);
+    bump_persistent_for(env, &DataKey::Stream(stream.id), ledgers);
+    let reserved_key = DataKey::Reserved(stream.id);
+    if env.storage().persistent().has(&reserved_key) {
+        bump_persistent_for(env, &reserved_key, ledgers);
+    }
+}
+
 fn committed(env: &Env) -> i128 {
     env.storage().persistent().get(&DataKey::Committed).unwrap_or(0)
 }
@@ -114,6 +157,7 @@ fn release(env: &Env, stream_id: u32, amount: i128) {
     }
     let total = committed(env).saturating_sub(amount).max(0);
     env.storage().persistent().set(&DataKey::Committed, &total);
+    bump_persistent(env, &DataKey::Committed);
 }
 
 /// Pays the recipient everything owed at `now`, releases that part of the
@@ -144,6 +188,8 @@ fn settle(env: &Env, stream_id: u32, mut stream: Stream, now: u64) -> Result<i12
     env.storage()
         .persistent()
         .set(&DataKey::Stream(stream_id), &stream);
+    bump_stream(env, &stream);
+    bump_instance(env);
 
     env.events()
         .publish((symbol_short!("s_wdraw"), stream_id), (stream.recipient.clone(), payout));
@@ -191,6 +237,8 @@ impl StreamingContract {
         env.storage().instance().set(&DataKey::Admin, &admin);
         env.storage().instance().set(&DataKey::Token, &usdc_token);
         env.storage().persistent().set(&DataKey::StreamCount, &0u32);
+        bump_instance(&env);
+        bump_persistent(&env, &DataKey::StreamCount);
     }
 
     /// Admin creates a new payment stream.
@@ -255,6 +303,10 @@ impl StreamingContract {
         env.storage()
             .persistent()
             .set(&DataKey::StreamCount, &(id + 1));
+        bump_stream(&env, &stream);
+        bump_persistent(&env, &DataKey::Committed);
+        bump_persistent(&env, &DataKey::StreamCount);
+        bump_instance(&env);
 
         env.events().publish(
             (symbol_short!("s_create"), recipient),
@@ -294,6 +346,8 @@ impl StreamingContract {
         env.storage()
             .persistent()
             .set(&DataKey::Stream(stream_id), &stream);
+        bump_stream(&env, &stream);
+        bump_instance(&env);
 
         env.events()
             .publish((symbol_short!("s_toggle"), stream_id), stream.status.clone());
@@ -375,6 +429,7 @@ impl StreamingContract {
         }
         let token_addr: Address = env.storage().instance().get(&DataKey::Token).unwrap();
         token::Client::new(&env, &token_addr).transfer(&env.current_contract_address(), &to, &amount);
+        bump_instance(&env);
         env.events().publish((symbol_short!("reclaim"), admin), (to, amount));
         Ok(())
     }
@@ -459,6 +514,7 @@ impl StreamingContract {
         let admin = admin(&env);
         admin.require_auth();
         env.storage().instance().set(&DataKey::PendingAdmin, &new_admin);
+        bump_instance(&env);
         env.events().publish((symbol_short!("adm_prop"), admin), new_admin);
     }
 
@@ -476,6 +532,7 @@ impl StreamingContract {
         let previous = admin(&env);
         env.storage().instance().set(&DataKey::Admin, &pending);
         env.storage().instance().remove(&DataKey::PendingAdmin);
+        bump_instance(&env);
         env.events().publish((symbol_short!("adm_acpt"), pending), previous);
         Ok(())
     }
@@ -493,6 +550,7 @@ impl StreamingContract {
             .get(&DataKey::PendingAdmin)
             .ok_or(Error::NoPendingAdmin)?;
         env.storage().instance().remove(&DataKey::PendingAdmin);
+        bump_instance(&env);
         env.events().publish((symbol_short!("adm_cncl"), admin), pending);
         Ok(())
     }
@@ -506,7 +564,10 @@ impl StreamingContract {
 mod tests {
     use super::*;
     use soroban_sdk::{
-        testutils::{Address as _, Events, Ledger},
+        testutils::{
+            storage::{Instance as _, Persistent as _},
+            Address as _, Events, Ledger,
+        },
         token::{Client as TokenClient, StellarAssetClient},
         vec, Env, IntoVal, Symbol,
     };
@@ -537,6 +598,36 @@ mod tests {
 
     fn at(env: &Env, t: u64) {
         env.ledger().with_mut(|l| l.timestamp = t);
+    }
+
+    #[test]
+    fn writes_extend_storage_ttl() {
+        let env = Env::default();
+        let (setup, _, id) = funded_stream(&env);
+        env.as_contract(&setup.client.address, || {
+            assert_eq!(env.storage().instance().get_ttl(), INSTANCE_TTL_EXTEND);
+            for key in [DataKey::StreamCount, DataKey::Committed, DataKey::Stream(id), DataKey::Reserved(id)] {
+                assert!(env.storage().persistent().get_ttl(&key) >= PERSISTENT_TTL_EXTEND);
+            }
+        });
+    }
+
+    #[test]
+    fn long_streams_stay_alive_until_they_end() {
+        let env = Env::default();
+        env.mock_all_auths();
+        let setup = deploy(&env);
+        let days: u64 = 200;
+        let duration = days * 86_400;
+        setup.token_admin.mint(&setup.client.address, &(duration as i128));
+        let id = setup.client.create_stream(&Address::generate(&env), &1, &(T0 + duration));
+
+        let wanted = (duration / SECONDS_PER_LEDGER) as u32 + 30 * DAY_IN_LEDGERS;
+        env.as_contract(&setup.client.address, || {
+            let expected = wanted.min(env.storage().max_ttl());
+            assert_eq!(env.storage().persistent().get_ttl(&DataKey::Stream(id)), expected);
+            assert_eq!(env.storage().persistent().get_ttl(&DataKey::Reserved(id)), expected);
+        });
     }
 
     /// Funds the contract and creates a RATE/s stream running T0..T0+DURATION.
