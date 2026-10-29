@@ -134,6 +134,30 @@ fn admin(env: &Env) -> Address {
     env.storage().instance().get(&DataKey::Admin).unwrap()
 }
 
+// ── Storage TTL ───────────────────────────────────────────────────────────────
+// Soroban archives entries whose TTL runs out, and calls that touch them then
+// fail until someone restores them. Every state-changing call extends the
+// contract instance and the persistent entries it writes.
+
+/// Ledgers per day at ~5s per ledger.
+const DAY_IN_LEDGERS: u32 = 17_280;
+pub(crate) const INSTANCE_TTL_EXTEND: u32 = 30 * DAY_IN_LEDGERS;
+const INSTANCE_TTL_THRESHOLD: u32 = INSTANCE_TTL_EXTEND - DAY_IN_LEDGERS;
+pub(crate) const PERSISTENT_TTL_EXTEND: u32 = 90 * DAY_IN_LEDGERS;
+const PERSISTENT_TTL_THRESHOLD: u32 = PERSISTENT_TTL_EXTEND - DAY_IN_LEDGERS;
+
+fn bump_instance(env: &Env) {
+    env.storage()
+        .instance()
+        .extend_ttl(INSTANCE_TTL_THRESHOLD, INSTANCE_TTL_EXTEND);
+}
+
+fn bump_persistent(env: &Env, key: &DataKey) {
+    env.storage()
+        .persistent()
+        .extend_ttl(key, PERSISTENT_TTL_THRESHOLD, PERSISTENT_TTL_EXTEND);
+}
+
 // ── Public types (returned to callers) ───────────────────────────────────────
 
 #[contracttype]
@@ -161,6 +185,9 @@ impl TreasuryVaultContract {
         env.storage().instance().set(&DataKey::Token, &usdc_token);
         env.storage().persistent().set(&DataKey::TotalRaised, &0i128);
         env.storage().persistent().set(&DataKey::TotalDisbursed, &0i128);
+        bump_instance(&env);
+        bump_persistent(&env, &DataKey::TotalRaised);
+        bump_persistent(&env, &DataKey::TotalDisbursed);
     }
 
     /// Deposit USDC into the vault.
@@ -198,6 +225,8 @@ impl TreasuryVaultContract {
         env.storage()
             .persistent()
             .set(&DataKey::TotalRaised, &new_raised);
+        bump_persistent(&env, &DataKey::TotalRaised);
+        bump_instance(&env);
 
         env.events()
             .publish((symbol_short!("deposit"), depositor), amount);
@@ -214,6 +243,7 @@ impl TreasuryVaultContract {
         let admin = admin(&env);
         admin.require_auth();
         env.storage().instance().set(&DataKey::ProofRegistry, &registry);
+        bump_instance(&env);
         env.events().publish((symbol_short!("reg_set"), admin), registry);
     }
 
@@ -310,6 +340,9 @@ impl TreasuryVaultContract {
         env.storage()
             .persistent()
             .set(&DataKey::TotalDisbursed, &new_disbursed);
+        bump_persistent(&env, &DataKey::TotalDisbursed);
+        bump_persistent(&env, &spent_key);
+        bump_instance(&env);
 
         env.events()
             .publish((symbol_short!("disburse"), recipient), (amount, proof_hash));
@@ -364,6 +397,7 @@ impl TreasuryVaultContract {
         let admin = admin(&env);
         admin.require_auth();
         env.storage().instance().set(&DataKey::PendingAdmin, &new_admin);
+        bump_instance(&env);
         env.events().publish((symbol_short!("adm_prop"), admin), new_admin);
     }
 
@@ -381,6 +415,7 @@ impl TreasuryVaultContract {
         let previous = admin(&env);
         env.storage().instance().set(&DataKey::Admin, &pending);
         env.storage().instance().remove(&DataKey::PendingAdmin);
+        bump_instance(&env);
         env.events().publish((symbol_short!("adm_acpt"), pending), previous);
         Ok(())
     }
@@ -398,6 +433,7 @@ impl TreasuryVaultContract {
             .get(&DataKey::PendingAdmin)
             .ok_or(Error::NoPendingAdmin)?;
         env.storage().instance().remove(&DataKey::PendingAdmin);
+        bump_instance(&env);
         env.events().publish((symbol_short!("adm_cncl"), admin), pending);
         Ok(())
     }
@@ -412,7 +448,10 @@ mod tests {
     use super::*;
     use proof_registry::ProofRegistryContract;
     use soroban_sdk::{
-        testutils::{Address as _, Events},
+        testutils::{
+            storage::{Instance as _, Persistent as _},
+            Address as _, Events,
+        },
         token::{Client as TokenClient, StellarAssetClient},
         Symbol,
     };
@@ -586,6 +625,22 @@ mod tests {
         setup.vault.set_proof_registry(&setup.registry.address);
 
         assert_eq!(try_pay(&setup, &env, 500_000, &some_hash(&env, 1)), Err(Error::ProofNotRegistered));
+    }
+
+    #[test]
+    fn writes_extend_storage_ttl() {
+        let env = Env::default();
+        env.mock_all_auths();
+        let hash = some_hash(&env, 1);
+        let setup = ready(&env, &hash, PIH_500000_PAYROLL, "payroll");
+        setup.vault.disburse(&recipient(&env), &500_000, &hash, &root(&env), &commitment(&env));
+
+        env.as_contract(&setup.vault.address, || {
+            assert_eq!(env.storage().instance().get_ttl(), INSTANCE_TTL_EXTEND);
+            for key in [DataKey::TotalRaised, DataKey::TotalDisbursed, DataKey::SpentProof(hash.clone())] {
+                assert_eq!(env.storage().persistent().get_ttl(&key), PERSISTENT_TTL_EXTEND);
+            }
+        });
     }
 
     #[test]
