@@ -164,13 +164,19 @@ describe('streams & treasury', () => {
     expect((await request(app).get('/api/streams/9/claimable')).status).toBe(404);
     mocked(stellar.getStreamAccumulated).mockResolvedValueOnce('125');
     const res = await request(app).get('/api/streams/1/claimable');
-    expect(res.body).toMatchObject({ streamId: 1, claimable: '125' });
+    expect(res.body).toMatchObject({ streamId: 1, claimable: '125', asset: 'XLM' });
   });
 
   it('rejects contract ids that are not C... addresses', async () => {
     const res = await request(app).get('/api/treasury/not-a-contract/balance');
     expect(res.status).toBe(400);
     expect(stellar.getVaultBalance).not.toHaveBeenCalled();
+  });
+
+  it('labels balances with the token the vault actually holds', async () => {
+    const res = await request(app).get('/api/treasury/default/balance');
+    expect(res.body).toMatchObject({ balance: '1000', asset: 'XLM' });
+    expect(stellar.getTokenSymbol).toHaveBeenCalledWith(process.env.TREASURY_VAULT_CONTRACT_ID);
   });
 
   it('returns nextCursor so clients can page through transactions', async () => {

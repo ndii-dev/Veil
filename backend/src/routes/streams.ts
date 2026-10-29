@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { config } from '../config/index.js';
 import { parse } from '../middleware/validate.js';
-import { getStream, getStreamAccumulated, getStreams } from '../services/stellar.js';
+import { getStream, getStreamAccumulated, getStreams, getTokenSymbol } from '../services/stellar.js';
 import { pageQuery, streamIdParam } from './schemas.js';
 
 export const streamsRouter = Router();
@@ -49,12 +49,15 @@ streamsRouter.get('/:streamId/claimable', async (req, res, next) => {
       res.status(503).json({ error: 'STREAMING_CONTRACT_ID not configured' });
       return;
     }
-    const claimable = await getStreamAccumulated(config.contracts.streaming, streamId);
+    const [claimable, asset] = await Promise.all([
+      getStreamAccumulated(config.contracts.streaming, streamId),
+      getTokenSymbol(config.contracts.streaming),
+    ]);
     if (claimable === null) {
       res.status(404).json({ error: `Stream ${streamId} not found` });
       return;
     }
-    res.json({ streamId, claimable, asset: 'USDC' });
+    res.json({ streamId, claimable, asset });
   } catch (err) {
     next(err);
   }

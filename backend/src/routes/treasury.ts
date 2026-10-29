@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { z } from 'zod';
 import { config } from '../config/index.js';
 import { parse } from '../middleware/validate.js';
-import { getVaultBalance, getVaultStats, getContractEvents } from '../services/stellar.js';
+import { getVaultBalance, getVaultStats, getContractEvents, getTokenSymbol } from '../services/stellar.js';
 import { contractIdParam, transactionsQuery } from './schemas.js';
 
 export const treasuryRouter = Router();
@@ -23,8 +23,8 @@ treasuryRouter.get('/:contractId/balance', async (req, res, next) => {
       return;
     }
 
-    const balance = await getVaultBalance(contractId);
-    res.json({ contractId, balance, asset: 'USDC' });
+    const [balance, asset] = await Promise.all([getVaultBalance(contractId), getTokenSymbol(contractId)]);
+    res.json({ contractId, balance, asset });
   } catch (err) {
     next(err);
   }

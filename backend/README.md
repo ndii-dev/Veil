@@ -123,8 +123,11 @@ curl http://localhost:4000/api/treasury/default/stats
 curl http://localhost:4000/api/treasury/default/balance
 ```
 ```json
-{ "contractId": "CAUWJ...", "balance": "100000000", "asset": "USDC" }
+{ "contractId": "CAUWJ...", "balance": "100000000", "asset": "XLM" }
 ```
+
+`asset` is the symbol of the token the contract holds, read from the chain (`XLM` for the native
+asset). It is `null` for older deployments that have no `get_token`.
 
 ### List all payment streams
 
@@ -153,7 +156,7 @@ curl http://localhost:4000/api/streams
 curl http://localhost:4000/api/streams/0/claimable
 ```
 ```json
-{ "streamId": "0", "claimable": "12540000", "asset": "USDC" }
+{ "streamId": 0, "claimable": "12540000", "asset": "XLM" }
 ```
 
 ### List all on-chain ZK proofs

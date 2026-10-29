@@ -66,6 +66,34 @@ export async function getVaultBalance(contractId: string): Promise<string> {
   return String(balance);
 }
 
+// ── Token symbol ──────────────────────────────────────────────────────────────
+// Contracts are deployed against whichever token SAC the deployer chose (the
+// testnet vault holds native XLM), so the asset label is read from the chain
+// rather than assumed. A contract's token never changes; cache it.
+
+const tokenSymbols = new Map<string, Promise<string | null>>();
+
+/** Symbol of the token a vault/streaming contract holds, or null if unknown. */
+export function getTokenSymbol(contractId: string): Promise<string | null> {
+  let symbol = tokenSymbols.get(contractId);
+  if (!symbol) {
+    symbol = (async () => {
+      try {
+        const token = String(await simulateRead(contractId, 'get_token'));
+        const raw = String(await simulateRead(token, 'symbol'));
+        return raw === 'native' ? 'XLM' : raw;
+      } catch (err) {
+        // Older deployments have no get_token; anything else is retried later.
+        if (isMissingFunction(err)) return null;
+        tokenSymbols.delete(contractId);
+        throw err;
+      }
+    })();
+    tokenSymbols.set(contractId, symbol);
+  }
+  return symbol;
+}
+
 export async function getVaultStats(contractId: string): Promise<VaultStats> {
   const stats = await simulateRead(contractId, 'get_stats') as Record<string, bigint>;
   return {

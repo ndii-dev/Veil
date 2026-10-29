@@ -4,6 +4,7 @@ import { vi } from 'vitest';
 vi.mock('../src/services/stellar.js', () => ({
   getVaultBalance: vi.fn(async () => '1000'),
   getVaultStats: vi.fn(async () => ({ vaultBalance: '1000', totalRaised: '2000', totalDisbursed: '1000' })),
+  getTokenSymbol: vi.fn(async () => 'XLM'),
   getContractEvents: vi.fn(async () => ({ events: [], nextCursor: null })),
   getStreams: vi.fn(async () => ({ items: [], total: 0 })),
   getStream: vi.fn(async () => null),
