@@ -41,13 +41,19 @@ async function simulateRead(contractId: string, method: string, args: xdr.ScVal[
     .setTimeout(30)
     .build();
 
-  const result = await server.simulateTransaction(tx);
+  // Failures here are the RPC node's or the contract's, not ours: 502.
+  let result: rpc.Api.SimulateTransactionResponse;
+  try {
+    result = await server.simulateTransaction(tx);
+  } catch (err) {
+    throw new HttpError(502, `Soroban RPC request failed [${contractId}::${method}]: ${(err as Error).message}`);
+  }
 
   if (rpc.Api.isSimulationError(result)) {
-    throw new Error(`Contract simulation failed [${contractId}::${method}]: ${result.error}`);
+    throw new HttpError(502, `Contract simulation failed [${contractId}::${method}]: ${result.error}`);
   }
   if (!result.result) {
-    throw new Error(`No return value from ${contractId}::${method}`);
+    throw new HttpError(502, `No return value from ${contractId}::${method}`);
   }
 
   return scValToNative(result.result.retval);
