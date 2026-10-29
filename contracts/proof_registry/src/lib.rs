@@ -68,6 +68,29 @@ fn admin(env: &Env) -> Address {
     env.storage().instance().get(&DataKey::Admin).unwrap()
 }
 
+// ── Storage TTL ───────────────────────────────────────────────────────────────
+// Soroban archives entries whose TTL runs out, and calls that touch them then
+// fail until someone restores them. Proof records back payouts and audits, so
+// they are extended to the network maximum when written.
+
+/// Ledgers per day at ~5s per ledger.
+const DAY_IN_LEDGERS: u32 = 17_280;
+pub(crate) const INSTANCE_TTL_EXTEND: u32 = 30 * DAY_IN_LEDGERS;
+const INSTANCE_TTL_THRESHOLD: u32 = INSTANCE_TTL_EXTEND - DAY_IN_LEDGERS;
+
+fn bump_instance(env: &Env) {
+    env.storage()
+        .instance()
+        .extend_ttl(INSTANCE_TTL_THRESHOLD, INSTANCE_TTL_EXTEND);
+}
+
+fn bump_persistent_max(env: &Env, key: &DataKey) {
+    let max = env.storage().max_ttl();
+    env.storage()
+        .persistent()
+        .extend_ttl(key, max.saturating_sub(DAY_IN_LEDGERS), max);
+}
+
 fn is_valid_proof_type(env: &Env, proof_type: &Symbol) -> bool {
     *proof_type == Symbol::new(env, "payroll")
         || *proof_type == Symbol::new(env, "operational")
@@ -86,6 +109,8 @@ impl ProofRegistryContract {
     pub fn __constructor(env: Env, admin: Address) {
         env.storage().instance().set(&DataKey::Admin, &admin);
         env.storage().persistent().set(&DataKey::ProofCount, &0u32);
+        bump_instance(&env);
+        bump_persistent_max(&env, &DataKey::ProofCount);
     }
 
     /// Register a ZK proof on-chain.
@@ -140,6 +165,10 @@ impl ProofRegistryContract {
         env.storage()
             .persistent()
             .set(&DataKey::ProofCount, &(id + 1));
+        bump_persistent_max(&env, &DataKey::Proof(id));
+        bump_persistent_max(&env, &DataKey::HashIndex(proof_hash.clone()));
+        bump_persistent_max(&env, &DataKey::ProofCount);
+        bump_instance(&env);
 
         env.events().publish(
             (symbol_short!("p_reg"), submitter),
@@ -243,6 +272,7 @@ impl ProofRegistryContract {
         let admin = admin(&env);
         admin.require_auth();
         env.storage().instance().set(&DataKey::PendingAdmin, &new_admin);
+        bump_instance(&env);
         env.events().publish((symbol_short!("adm_prop"), admin), new_admin);
     }
 
@@ -260,6 +290,7 @@ impl ProofRegistryContract {
         let previous = admin(&env);
         env.storage().instance().set(&DataKey::Admin, &pending);
         env.storage().instance().remove(&DataKey::PendingAdmin);
+        bump_instance(&env);
         env.events().publish((symbol_short!("adm_acpt"), pending), previous);
         Ok(())
     }
@@ -277,6 +308,7 @@ impl ProofRegistryContract {
             .get(&DataKey::PendingAdmin)
             .ok_or(Error::NoPendingAdmin)?;
         env.storage().instance().remove(&DataKey::PendingAdmin);
+        bump_instance(&env);
         env.events().publish((symbol_short!("adm_cncl"), admin), pending);
         Ok(())
     }
@@ -290,7 +322,10 @@ impl ProofRegistryContract {
 mod tests {
     use super::*;
     use soroban_sdk::{
-        testutils::{Address as _, Events},
+        testutils::{
+            storage::{Instance as _, Persistent as _},
+            Address as _, Events,
+        },
         vec, BytesN, Env, IntoVal, Symbol,
     };
 
@@ -313,6 +348,21 @@ mod tests {
         for i in 0..n {
             client.register_proof(admin, &hash(env, i), &hash(env, 0xff), &payroll(env));
         }
+    }
+
+    #[test]
+    fn registering_extends_storage_ttl() {
+        let env = Env::default();
+        env.mock_all_auths();
+        let (client, admin) = deploy(&env);
+        register_n(&env, &client, &admin, 1);
+        env.as_contract(&client.address, || {
+            let max = env.storage().max_ttl();
+            assert_eq!(env.storage().instance().get_ttl(), INSTANCE_TTL_EXTEND);
+            for key in [DataKey::Proof(0), DataKey::HashIndex(hash(&env, 0)), DataKey::ProofCount] {
+                assert_eq!(env.storage().persistent().get_ttl(&key), max);
+            }
+        });
     }
 
     #[test]
