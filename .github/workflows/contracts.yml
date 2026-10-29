@@ -12,6 +12,10 @@ on:
       - 'contracts/**'
       - '.github/workflows/contracts.yml'
 
+# CI only reads the repo; deny the GITHUB_TOKEN every other scope.
+permissions:
+  contents: read
+
 defaults:
   run:
     working-directory: contracts

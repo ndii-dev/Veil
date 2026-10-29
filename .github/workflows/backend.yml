@@ -12,6 +12,10 @@ on:
       - 'backend/**'
       - '.github/workflows/backend.yml'
 
+# CI only reads the repo; deny the GITHUB_TOKEN every other scope.
+permissions:
+  contents: read
+
 defaults:
   run:
     working-directory: backend
