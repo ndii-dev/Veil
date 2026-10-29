@@ -210,10 +210,15 @@ export const getStreams = (contractId: string, start: number, limit: number) =>
 export const getStream = (contractId: string, streamId: number) =>
   readOne(contractId, STREAM_METHODS, STREAM_NOT_FOUND, toStream, streamId);
 
-export async function getStreamAccumulated(contractId: string, streamId: number): Promise<string> {
-  const args = [xdr.ScVal.scvU32(streamId)];
-  const val = await simulateRead(contractId, 'get_accumulated', args);
-  return String(val);
+/** Claimable amount for a stream; null when the stream doesn't exist. */
+export async function getStreamAccumulated(contractId: string, streamId: number): Promise<string | null> {
+  try {
+    const val = await simulateRead(contractId, 'get_accumulated', [xdr.ScVal.scvU32(streamId)]);
+    return String(val);
+  } catch (err) {
+    if (isContractError(err, STREAM_NOT_FOUND)) return null;
+    throw err;
+  }
 }
 
 function toProof(p: Record<string, unknown>): Proof {

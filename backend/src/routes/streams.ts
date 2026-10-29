@@ -50,6 +50,10 @@ streamsRouter.get('/:streamId/claimable', async (req, res, next) => {
       return;
     }
     const claimable = await getStreamAccumulated(config.contracts.streaming, streamId);
+    if (claimable === null) {
+      res.status(404).json({ error: `Stream ${streamId} not found` });
+      return;
+    }
     res.json({ streamId, claimable, asset: 'USDC' });
   } catch (err) {
     next(err);

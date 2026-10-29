@@ -159,6 +159,14 @@ describe('streams & treasury', () => {
     expect((await request(app).get('/api/streams/-1')).status).toBe(400);
   });
 
+  it('404s the claimable amount of an unknown stream', async () => {
+    mocked(stellar.getStreamAccumulated).mockResolvedValueOnce(null);
+    expect((await request(app).get('/api/streams/9/claimable')).status).toBe(404);
+    mocked(stellar.getStreamAccumulated).mockResolvedValueOnce('125');
+    const res = await request(app).get('/api/streams/1/claimable');
+    expect(res.body).toMatchObject({ streamId: 1, claimable: '125' });
+  });
+
   it('rejects contract ids that are not C... addresses', async () => {
     const res = await request(app).get('/api/treasury/not-a-contract/balance');
     expect(res.status).toBe(400);
