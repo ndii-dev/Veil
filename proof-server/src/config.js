@@ -19,8 +19,6 @@ const MAX_ALLOWLIST_SIZE = 2 ** MERKLE_DEPTH;
 // shieldfund-contracts' proof_registry stores.
 const PROOF_TYPES = { payroll: 0, operational: 1, relief: 2 };
 
-const PORT = process.env.PORT || 4100;
-
 function intEnv(name, fallback) {
   const raw = process.env[name];
   if (raw === undefined || raw === "") return fallback;
@@ -28,6 +26,8 @@ function intEnv(name, fallback) {
   if (!Number.isInteger(n) || n < 0) throw new Error(`${name} must be a non-negative integer, got "${raw}"`);
   return n;
 }
+
+const PORT = intEnv("PORT", 4100);
 
 // Comma-separated API keys accepted on /api/prove (X-API-Key header). Empty
 // means the endpoint refuses every request — it never runs unauthenticated.
