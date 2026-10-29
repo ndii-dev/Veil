@@ -86,8 +86,8 @@ export const config = {
   db: {
     // Directory for periodic SQLite snapshots; unset disables them.
     backupDir: optional('DB_BACKUP_DIR', ''),
-    backupIntervalMinutes: int('DB_BACKUP_INTERVAL_MINUTES', 60),
-    backupKeep: int('DB_BACKUP_KEEP', 48),
+    backupIntervalMinutes: int('DB_BACKUP_INTERVAL_MINUTES', 60, 1),
+    backupKeep: int('DB_BACKUP_KEEP', 48, 1),
   },
 
   pinata: {
