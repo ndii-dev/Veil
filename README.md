@@ -104,7 +104,7 @@ Veil/
 │   └── proof_registry/   on-chain store of verified proof hashes
 │
 ├── backend/          REST API (Node 22, Express, TypeScript, SQLite)
-│   └── src/              contract reads, Horizon event indexing, campaigns, proof anchoring
+│   └── src/              contract reads, event history, campaigns, proof anchoring
 │
 ├── proof-server/     ZK proof service (Node 22, Noir, Barretenberg)
 │   ├── circuits/         payroll_compliance + hash_util Noir circuits
@@ -217,7 +217,7 @@ curl http://localhost:4000/api/treasury/default/stats
 
 **On-chain:** Stellar · Soroban · Rust
 **Zero-knowledge:** Noir · Barretenberg (UltraHonk) · Pedersen hashing · Merkle proofs
-**Off-chain:** Node.js · Express · TypeScript · SQLite · Horizon / Soroban RPC
+**Off-chain:** Node.js · Express · TypeScript · SQLite · Soroban RPC
 **Ops:** GitHub Actions · Docker · Dependabot · Railway
 
 ---

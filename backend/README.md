@@ -5,7 +5,7 @@
 ![Node](https://img.shields.io/badge/Node.js-22+-339933?logo=nodedotjs)
 ![Express](https://img.shields.io/badge/Express-4-black?logo=express)
 
-Express.js REST API for the ShieldFund ZK treasury platform. Reads live state from the Soroban contracts via simulation calls (no signing required), provides Horizon event indexing for transaction history, persists campaign metadata in SQLite, and anchors ZK proofs on-chain: it asks [the proof server](../proof-server) to generate and `bb verify` a proof, then submits `register_proof()` from its own submitter key.
+Express.js REST API for the ShieldFund ZK treasury platform. Reads live state from the Soroban contracts via simulation calls (no signing required), reads contract events from Soroban RPC for transaction history, persists campaign metadata in SQLite, and anchors ZK proofs on-chain: it asks [the proof server](../proof-server) to generate and `bb verify` a proof, then submits `register_proof()` from its own submitter key.
 
 ---
 
@@ -41,7 +41,7 @@ shieldfund-backend
 │   │   ├── simulateRead()  builds + submits simulation txn (no fee, no signing)
 │   │   ├── getVaultBalance()
 │   │   ├── getVaultStats()
-│   │   ├── getContractEvents()   Horizon event indexing
+│   │   ├── getContractEvents()   contract event history (RPC getEvents)
 │   │   ├── getStreams() / getStream()   paginated + direct reads
 │   │   ├── getStreamAccumulated()
 │   │   ├── getProofs() / getProof()     paginated + direct reads
@@ -300,7 +300,6 @@ old `get_all_*` getters, so the API behaves the same against either deployment.
 | `PORT` | `4000` | Server port |
 | `NODE_ENV` | `development` | `development` or `production` |
 | `STELLAR_NETWORK` | `testnet` | `testnet` or `mainnet` |
-| `STELLAR_HORIZON_URL` | testnet URL | Horizon REST API |
 | `STELLAR_RPC_URL` | testnet URL | Soroban RPC URL |
 | `TREASURY_VAULT_CONTRACT_ID` | set | Vault contract address |
 | `STREAMING_CONTRACT_ID` | set | Streaming contract address |

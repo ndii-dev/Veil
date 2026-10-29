@@ -60,7 +60,6 @@ export const config = {
 
   stellar: {
     network: network as 'testnet' | 'mainnet',
-    horizonUrl: optional('STELLAR_HORIZON_URL', 'https://horizon-testnet.stellar.org'),
     rpcUrl: optional('STELLAR_RPC_URL', 'https://soroban-testnet.stellar.org'),
   },
 
