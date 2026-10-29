@@ -38,7 +38,8 @@ const field = z.string().regex(/^(\d{1,78}|0x[0-9a-fA-F]{1,64})$/, 'decimal or 0
 
 export const anchorProofBody = z.object({
   recipientId: field,
-  amount: field,
+  // disburse() rejects amount <= 0, so a zero-amount proof is useless.
+  amount: field.refine(v => BigInt(v) > 0n, 'must be greater than 0'),
   proofType: z.enum(['payroll', 'operational', 'relief']),
   allowlist: z.array(field).min(1).max(16),
   budgetCap: field,

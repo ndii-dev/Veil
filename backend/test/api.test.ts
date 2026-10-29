@@ -143,6 +143,14 @@ describe('proofs', () => {
     expect(proofServer.proveWithProofServer).not.toHaveBeenCalled();
   });
 
+  it('rejects a zero amount before calling the proof server', async () => {
+    for (const amount of ['0', '0x0']) {
+      const res = await request(app).post('/api/proofs').set(ADMIN).send({ ...input, amount });
+      expect(res.status).toBe(400);
+    }
+    expect(proofServer.proveWithProofServer).not.toHaveBeenCalled();
+  });
+
   it('requires admin auth to anchor', async () => {
     expect((await request(app).post('/api/proofs').send(input)).status).toBe(401);
     expect(proofServer.proveWithProofServer).not.toHaveBeenCalled();
