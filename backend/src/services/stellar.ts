@@ -311,8 +311,13 @@ async function submitRegisterProof(
   prepared.sign(keypair);
 
   const sent = await server.sendTransaction(prepared);
+  if (sent.status === 'TRY_AGAIN_LATER') {
+    throw new HttpError(503, 'Network is congested; register_proof was not submitted, try again shortly');
+  }
   if (sent.status !== 'PENDING' && sent.status !== 'DUPLICATE') {
-    throw new Error(`register_proof submission rejected: ${sent.status}`);
+    // ERROR: include the result code (e.g. txInsufficientFee) for the logs.
+    const code = sent.errorResult?.result().switch().name ?? 'unknown';
+    throw new Error(`register_proof submission rejected: ${sent.status} (${code})`);
   }
 
   const final = await server.pollTransaction(sent.hash, {
