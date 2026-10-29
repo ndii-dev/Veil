@@ -397,9 +397,10 @@ shieldfund-contracts/
 
 ## CI
 
-GitHub Actions on every push and PR:
+GitHub Actions ([`.github/workflows/contracts.yml`](../.github/workflows/contracts.yml)) on every push and PR
+that touches `contracts/`:
 - **`cargo test --workspace`** — runs the in-process test suites
-- **`stellar contract build`** — compiles all 3 WASMs (push to main only)
+- **`cargo build --target wasm32v1-none --release`** — compiles all 3 WASMs, after the tests pass
 - WASM artifacts uploaded for 7 days after each successful build
 
 ---
