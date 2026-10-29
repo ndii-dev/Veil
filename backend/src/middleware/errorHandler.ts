@@ -7,7 +7,13 @@ export class HttpError extends Error {
   }
 }
 
-export const errorHandler: ErrorRequestHandler = (err, _req, res, _next) => {
+export const errorHandler: ErrorRequestHandler = (err, _req, res, next) => {
+  // A response is already streaming; Express's default handler closes it.
+  if (res.headersSent) {
+    next(err);
+    return;
+  }
+
   const status = (err as { status?: number }).status ?? 500;
   if (status >= 500) console.error(err);
 
