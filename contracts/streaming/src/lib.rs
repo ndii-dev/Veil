@@ -504,6 +504,11 @@ impl StreamingContract {
         admin(&env)
     }
 
+    /// The token SAC this contract streams (set at deploy).
+    pub fn get_token(env: Env) -> Address {
+        env.storage().instance().get(&DataKey::Token).unwrap()
+    }
+
     // ── Two-step admin transfer ──────────────────────────────────────────────
 
     /// Step 1 (current admin): nominate `new_admin`. Nothing changes until the
@@ -598,6 +603,13 @@ mod tests {
 
     fn at(env: &Env, t: u64) {
         env.ledger().with_mut(|l| l.timestamp = t);
+    }
+
+    #[test]
+    fn get_token_returns_the_streamed_token() {
+        let env = Env::default();
+        let setup = deploy(&env);
+        assert_eq!(setup.client.get_token(), setup.token.address);
     }
 
     #[test]

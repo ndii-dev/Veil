@@ -57,6 +57,7 @@ shieldfund-contracts (Cargo workspace)
 │   ├── get_stream_count() / get_streams(start, limit)   paginated reads
 │   ├── get_all_streams()   deprecated — unbounded
 │   ├── get_admin()
+│   ├── get_token()
 │   ├── propose_admin()     step 1 of admin transfer (auth: current admin)
 │   ├── accept_admin()      step 2 (auth: nominee)
 │   └── cancel_admin_transfer() / get_pending_admin()
@@ -143,6 +144,7 @@ streaming contract
 | `get_streams` | — | `start: u32`, `limit: u32` (1–50) | `Vec<Stream>` |
 | `get_all_streams` | — | — | `Vec<Stream>` (deprecated) |
 | `get_admin` | — | — | `Address` |
+| `get_token` | — | — | `Address` (token SAC) |
 | `propose_admin` | `admin` | `new_admin: Address` | — |
 | `accept_admin` | nominee | — | — |
 | `cancel_admin_transfer` | `admin` | — | — |
