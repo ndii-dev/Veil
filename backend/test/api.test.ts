@@ -84,7 +84,7 @@ describe('proofs', () => {
   const proveResult = {
     valid: true as const, proofType: 'payroll' as const,
     proofHash: hex32('a1'), publicInputsHash: hex32('b2'), publicInputs: ['0x1'],
-    merkleRoot: '0x1', budgetCommitment: '0x2', budgetSalt: '777', recipientId: '0x2a', amount: '0x1',
+    merkleRoot: '0x1', budgetCommitment: '0x2', recipientId: '0x2a', amount: '0x1',
   };
   const input = { recipientId: '42', amount: '500000', proofType: 'payroll', allowlist: ['42'], budgetCap: '1000000' };
 

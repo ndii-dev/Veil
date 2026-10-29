@@ -200,8 +200,7 @@ curl -X POST http://localhost:4000/api/proofs \
   "publicInputsHash": "0x51d0...",
   "publicInputs": ["0x045c...", "0x2484...", "0x...2a", "0x...7a120", "0x...0"],
   "merkleRoot": "0x045c...",
-  "budgetCommitment": "0x2484...",
-  "budgetSalt": "777"
+  "budgetCommitment": "0x2484..."
 }
 ```
 

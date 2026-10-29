@@ -23,7 +23,6 @@ const proveResponseSchema = z.object({
   publicInputs: z.array(z.string()),
   merkleRoot: z.string(),
   budgetCommitment: z.string(),
-  budgetSalt: z.string(),
   recipientId: z.string(),
   amount: z.string(),
 });

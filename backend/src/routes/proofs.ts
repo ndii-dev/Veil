@@ -79,8 +79,6 @@ proofsRouter.post('/', requireAdmin, async (req, res, next) => {
       publicInputs: proof.publicInputs,
       merkleRoot: proof.merkleRoot,
       budgetCommitment: proof.budgetCommitment,
-      // Needed to reproduce the same budget_commitment for later proofs.
-      budgetSalt: proof.budgetSalt,
     });
   } catch (err) {
     next(err);

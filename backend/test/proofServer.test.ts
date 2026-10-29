@@ -35,6 +35,14 @@ afterEach(() => {
 });
 
 describe('proveWithProofServer', () => {
+  it('accepts the proof server response and sends the API key', async () => {
+    const fetchFn = mockFetch(200, okBody);
+    await proveWithProofServer(input);
+    const [url, init] = fetchFn.mock.calls[0];
+    expect(String(url)).toBe('http://proof.test/api/prove');
+    expect(init.headers['x-api-key']).toBe('test-prove-key');
+  });
+
   it('maps a rejected key to 503', async () => {
     mockFetch(401, { error: 'invalid API key' });
     await expect(proveWithProofServer(input)).rejects.toMatchObject({ status: 503 });
