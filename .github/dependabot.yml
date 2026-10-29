@@ -1,22 +1,33 @@
 version: 2
+# Minor and patch bumps arrive as one PR per package per week; majors
+# stay separate because they can break things.
 updates:
   - package-ecosystem: "npm"
     directory: "/backend"
     schedule:
       interval: "weekly"
     open-pull-requests-limit: 5
+    groups:
+      minor-and-patch:
+        update-types: ["minor", "patch"]
 
   - package-ecosystem: "npm"
     directory: "/proof-server"
     schedule:
       interval: "weekly"
     open-pull-requests-limit: 5
+    groups:
+      minor-and-patch:
+        update-types: ["minor", "patch"]
 
   - package-ecosystem: "cargo"
     directory: "/contracts"
     schedule:
       interval: "weekly"
     open-pull-requests-limit: 5
+    groups:
+      minor-and-patch:
+        update-types: ["minor", "patch"]
 
   # Bumps the actions used in .github/workflows.
   - package-ecosystem: "github-actions"
@@ -24,6 +35,9 @@ updates:
     schedule:
       interval: "weekly"
     open-pull-requests-limit: 5
+    groups:
+      minor-and-patch:
+        update-types: ["minor", "patch"]
 
   # Bumps the digest-pinned Node base image in the proof-server Dockerfile.
   - package-ecosystem: "docker"
@@ -31,3 +45,6 @@ updates:
     schedule:
       interval: "weekly"
     open-pull-requests-limit: 5
+    groups:
+      minor-and-patch:
+        update-types: ["minor", "patch"]
