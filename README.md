@@ -103,7 +103,7 @@ Veil/
 │   ├── streaming/        per-second payment streams with funding reservations
 │   └── proof_registry/   on-chain store of verified proof hashes
 │
-├── backend/          REST API (Node 20, Express, TypeScript, SQLite)
+├── backend/          REST API (Node 22, Express, TypeScript, SQLite)
 │   └── src/              contract reads, Horizon event indexing, campaigns, proof anchoring
 │
 ├── proof-server/     ZK proof service (Node 22, Noir, Barretenberg)
@@ -157,7 +157,7 @@ The backend runs on `http://localhost:4000`. Full reference: [backend/README.md]
 
 | Tool | Version | Needed for |
 |------|---------|-----------|
-| Node.js | 20+ (22 for the proof server) | backend, proof-server |
+| Node.js | 22 LTS | backend, proof-server |
 | Rust + `wasm32-unknown-unknown` | stable | contracts |
 | `nargo` (Noir) | `1.0.0-beta.22` | proof-server |
 | `bb` (Barretenberg) | `5.0.0-nightly.20260522` | proof-server |

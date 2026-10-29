@@ -2,7 +2,7 @@
 
 ![CI](https://github.com/ndii-dev/Veil/actions/workflows/backend.yml/badge.svg)
 ![Stellar](https://img.shields.io/badge/Stellar-Testnet-blue?logo=stellar)
-![Node](https://img.shields.io/badge/Node.js-20+-339933?logo=nodedotjs)
+![Node](https://img.shields.io/badge/Node.js-22+-339933?logo=nodedotjs)
 ![Express](https://img.shields.io/badge/Express-4-black?logo=express)
 
 Express.js REST API for the ShieldFund ZK treasury platform. Reads live state from the Soroban contracts via simulation calls (no signing required), provides Horizon event indexing for transaction history, persists campaign metadata in SQLite, and anchors ZK proofs on-chain: it asks [the proof server](../proof-server) to generate and `bb verify` a proof, then submits `register_proof()` from its own submitter key.
