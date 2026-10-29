@@ -19,11 +19,3 @@ debug-assertions = false
 panic         = "abort"
 codegen-units = 1
 lto           = true
-
-# ──────────────────────────────────────────────
-# NOTE: This directory is designed to be pushed
-# as its OWN repository: shieldfund-contracts
-# It has zero dependency on the frontend (../src)
-# and can be built / deployed independently with
-# the Stellar CLI.
-# ──────────────────────────────────────────────
