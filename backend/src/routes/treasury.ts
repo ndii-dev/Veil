@@ -19,7 +19,7 @@ treasuryRouter.get('/:contractId/balance', async (req, res, next) => {
     parse(z.object({}).strict(), req.query);
 
     if (!contractId) {
-      res.status(400).json({ error: 'No TREASURY_VAULT_CONTRACT_ID configured. Set it in .env' });
+      res.status(503).json({ error: 'TREASURY_VAULT_CONTRACT_ID not configured' });
       return;
     }
 
@@ -37,7 +37,7 @@ treasuryRouter.get('/:contractId/stats', async (req, res, next) => {
     parse(z.object({}).strict(), req.query);
 
     if (!contractId) {
-      res.status(400).json({ error: 'No TREASURY_VAULT_CONTRACT_ID configured.' });
+      res.status(503).json({ error: 'TREASURY_VAULT_CONTRACT_ID not configured' });
       return;
     }
 
@@ -55,7 +55,7 @@ treasuryRouter.get('/:contractId/transactions', async (req, res, next) => {
     const { limit, cursor } = parse(transactionsQuery, req.query);
 
     if (!contractId) {
-      res.status(400).json({ error: 'No TREASURY_VAULT_CONTRACT_ID configured.' });
+      res.status(503).json({ error: 'TREASURY_VAULT_CONTRACT_ID not configured' });
       return;
     }
 
