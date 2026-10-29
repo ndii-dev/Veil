@@ -193,6 +193,13 @@ cp .env.example .env
 PROOF_SERVER_API_KEY="$PROOF_KEY" npm run dev
 ```
 
+Or run the proof server and backend together in Docker:
+
+```bash
+export PROOF_KEY="$(openssl rand -hex 32)"
+docker compose up --build
+```
+
 Then try it:
 
 ```bash

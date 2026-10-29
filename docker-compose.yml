@@ -1,0 +1,39 @@
+# Local stack: proof server + backend, wired together.
+#
+#   export PROOF_KEY="$(openssl rand -hex 32)"
+#   docker compose up --build
+#
+# Backend → http://localhost:4000, proof server → http://localhost:4100.
+# The backend reads backend/.env if present (copy backend/.env.example);
+# the settings below override it. The proof-server image is linux/amd64.
+
+services:
+  proof-server:
+    build: ./proof-server
+    platform: linux/amd64
+    environment:
+      PROVE_API_KEYS: ${PROOF_KEY:?set PROOF_KEY, e.g. export PROOF_KEY="$(openssl rand -hex 32)"}
+    ports:
+      - "4100:4100"
+    restart: unless-stopped
+
+  backend:
+    build: ./backend
+    env_file:
+      - path: ./backend/.env
+        required: false
+    environment:
+      PROOF_SERVER_URL: http://proof-server:4100
+      PROOF_SERVER_API_KEY: ${PROOF_KEY}
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:5173}
+    ports:
+      - "4000:4000"
+    volumes:
+      - backend-data:/data
+    depends_on:
+      proof-server:
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  backend-data:
