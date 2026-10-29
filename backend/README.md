@@ -269,7 +269,7 @@ curl http://localhost:4000/api/campaigns/1
 
 | Method | Path | Description |
 |--------|------|-------------|
-| `GET` | `/api/campaigns` | All campaigns from SQLite |
+| `GET` | `/api/campaigns?start=0&limit=50` | Page of campaigns, newest first (`limit` 1–100) → `{ campaigns, total, start, limit }` |
 | `GET` | `/api/campaigns/:id` | Single campaign |
 | `POST` | `/api/campaigns` | **Admin.** Create campaign metadata (body: `{ id, title, goal, metadata? }`). `409` if the id exists. |
 

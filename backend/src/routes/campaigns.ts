@@ -2,17 +2,16 @@ import { Router } from 'express';
 import { campaignDb } from '../services/db.js';
 import { requireAdmin } from '../middleware/auth.js';
 import { parse } from '../middleware/validate.js';
-import { campaignBody, campaignIdParam } from './schemas.js';
-import { z } from 'zod';
+import { campaignBody, campaignIdParam, pageQuery } from './schemas.js';
 
 export const campaignsRouter = Router();
 
-// GET /api/campaigns
+// GET /api/campaigns?start=0&limit=50 (newest first)
 campaignsRouter.get('/', (req, res, next) => {
   try {
-    parse(z.object({}).strict(), req.query);
-    const campaigns = campaignDb.findAll();
-    res.json({ campaigns });
+    const { start, limit } = parse(pageQuery, req.query);
+    const { items, total } = campaignDb.findPage(start, limit);
+    res.json({ campaigns: items, total, start, limit });
   } catch (err) {
     next(err);
   }

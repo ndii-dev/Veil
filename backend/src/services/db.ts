@@ -33,9 +33,11 @@ const getCampaignById = db.prepare<[string], CampaignRow>(
   'SELECT * FROM campaigns WHERE id = ?'
 );
 
-const getAllCampaigns = db.prepare<[], CampaignRow>(
-  'SELECT * FROM campaigns ORDER BY rowid DESC'
+const getCampaignPage = db.prepare<[number, number], CampaignRow>(
+  'SELECT * FROM campaigns ORDER BY rowid DESC LIMIT ? OFFSET ?'
 );
+
+const countCampaigns = db.prepare<[], { n: number }>('SELECT COUNT(*) AS n FROM campaigns');
 
 function rowToCampaign(row: CampaignRow): Campaign {
   return {
@@ -63,7 +65,11 @@ export const campaignDb = {
     return row ? rowToCampaign(row) : undefined;
   },
 
-  findAll(): Campaign[] {
-    return getAllCampaigns.all().map(rowToCampaign);
+  /** Newest first. */
+  findPage(start: number, limit: number): { items: Campaign[]; total: number } {
+    return {
+      items: getCampaignPage.all(limit, start).map(rowToCampaign),
+      total: countCampaigns.get()?.n ?? 0,
+    };
   },
 };

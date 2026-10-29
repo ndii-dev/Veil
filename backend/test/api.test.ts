@@ -75,6 +75,18 @@ describe('campaigns', () => {
     expect(all.body.campaigns.map((c: { id: string }) => c.id)).toContain('relief-q4');
   });
 
+  it('pages the campaign list, newest first', async () => {
+    for (const id of ['page-a', 'page-b', 'page-c']) {
+      await request(app).post('/api/campaigns').set(ADMIN).send({ id, title: id, goal: '1' });
+    }
+    const res = await request(app).get('/api/campaigns?start=0&limit=2');
+    expect(res.status).toBe(200);
+    expect(res.body.campaigns.map((c: { id: string }) => c.id)).toEqual(['page-c', 'page-b']);
+    expect(res.body).toMatchObject({ start: 0, limit: 2 });
+    expect(res.body.total).toBeGreaterThanOrEqual(3);
+    expect((await request(app).get('/api/campaigns?limit=500')).status).toBe(400);
+  });
+
   it('404s unknown campaigns', async () => {
     expect((await request(app).get('/api/campaigns/missing')).status).toBe(404);
   });
