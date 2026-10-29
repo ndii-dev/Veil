@@ -46,6 +46,9 @@ export async function proveWithProofServer(req: ProveRequest): Promise<ProveResp
       signal: AbortSignal.timeout(config.proofs.serverTimeoutMs),
     });
   } catch (err) {
+    if ((err as Error).name === 'TimeoutError') {
+      throw new HttpError(504, `Proof server did not answer within ${config.proofs.serverTimeoutMs}ms`);
+    }
     throw new HttpError(502, `Proof server unreachable: ${(err as Error).message}`);
   }
 

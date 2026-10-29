@@ -52,4 +52,14 @@ describe('proveWithProofServer', () => {
     mockFetch(400, { error: 'amount exceeds budget' });
     await expect(proveWithProofServer(input)).rejects.toMatchObject({ status: 422, message: 'amount exceeds budget' });
   });
+
+  it('reports a timeout as 504, not as unreachable', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new DOMException('timed out', 'TimeoutError')));
+    await expect(proveWithProofServer(input)).rejects.toMatchObject({ status: 504 });
+  });
+
+  it('reports a connection failure as 502', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new TypeError('fetch failed')));
+    await expect(proveWithProofServer(input)).rejects.toMatchObject({ status: 502 });
+  });
 });
