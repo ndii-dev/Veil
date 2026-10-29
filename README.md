@@ -1,101 +1,244 @@
+<div align="center">
+
 # Veil
+
+**Private treasury management on Stellar, backed by zero-knowledge proofs.**
 
 [![Contracts](https://github.com/ndii-dev/Veil/actions/workflows/contracts.yml/badge.svg)](https://github.com/ndii-dev/Veil/actions/workflows/contracts.yml)
 [![Backend](https://github.com/ndii-dev/Veil/actions/workflows/backend.yml/badge.svg)](https://github.com/ndii-dev/Veil/actions/workflows/backend.yml)
 [![Proof Server](https://github.com/ndii-dev/Veil/actions/workflows/proof-server.yml/badge.svg)](https://github.com/ndii-dev/Veil/actions/workflows/proof-server.yml)
 ![Stellar](https://img.shields.io/badge/Stellar-Testnet-blue?logo=stellar)
+![Soroban](https://img.shields.io/badge/Soroban-Rust-orange?logo=rust)
+![Noir](https://img.shields.io/badge/ZK-Noir%20%2B%20UltraHonk-black)
 ![License](https://img.shields.io/badge/license-MIT-green)
 
-**Private treasury management on Stellar.** Veil lets an organisation hold funds, stream payroll and
-pay out grants on-chain, while proving with zero-knowledge proofs that each payment follows the rules
-(approved recipient, within budget) without publishing the full recipient list or the budget itself.
+</div>
 
-This monorepo holds the whole stack: Soroban smart contracts, the API backend, and the Noir proof server.
+---
+
+## Overview
+
+Organisations that run their money on a public blockchain face a trade-off: everything is transparent,
+including things that shouldn't be. Who is on the payroll, how much each team's budget is, which
+grantees were approved: all of it is visible to anyone reading the chain.
+
+**Veil removes that trade-off.** Funds sit in an on-chain vault on Stellar, and every payout has to be
+backed by a zero-knowledge proof that it follows the organisation's rules:
+
+- the recipient is on the approved list, and
+- the amount is within the budget the admin committed to in advance.
+
+The proof shows the rules were followed **without revealing the rest of the list or the budget figure**.
+Anyone can audit that every payment was compliant; nobody learns more than they need to.
+
+### What you can do with it
+
+| | |
+|---|---|
+| **Hold funds** | Accept deposits into a Soroban treasury vault and track total raised and disbursed. |
+| **Pay out with proof** | Disburse only against a fresh, unspent proof made for exactly that recipient and amount. |
+| **Stream payroll** | Pay people per second; recipients withdraw whenever they like, and admins can pause or close streams. |
+| **Audit publicly** | Every proof is anchored on-chain in a registry anyone can query. |
+| **Run campaigns** | Store campaign metadata (title, goal, details) off-chain behind a simple REST API. |
+
+### Use cases
+
+- **Payroll** for DAOs and remote teams, without exposing salaries or headcount.
+- **Operational budgets**, proving each spend is within the approved cap.
+- **Relief and grant distribution**, proving each beneficiary was approved without publishing the full list.
+
+These three match the proof types the system supports: `payroll`, `operational` and `relief`.
+
+---
+
+## How it works
+
+```
+   Admin                                   Veil                                       Stellar
+ ─────────                ─────────────────────────────────────────            ──────────────────
+                           ┌─────────────────────┐
+ allowlist + budget cap ──►│  backend  :4000     │
+ recipient + amount        │  Express API        │
+                           └──────────┬──────────┘
+                                      │ 1. POST /api/prove
+                                      ▼
+                           ┌─────────────────────┐
+                           │ proof-server :4100  │  2. Noir circuit proves:
+                           │ Noir + Barretenberg │     • recipient ∈ allowlist (Merkle)
+                           └──────────┬──────────┘     • amount ≤ committed budget cap
+                                      │                3. bb verify checks the proof locally
+                                      │ proof hash
+                                      ▼
+                           ┌─────────────────────┐   4. register_proof()   ┌──────────────────┐
+                           │  backend            │ ──────────────────────► │ proof_registry   │
+                           └─────────────────────┘                         └────────┬─────────┘
+                                                                                     │
+                                                      5. disburse(recipient,         ▼
+                                                         amount, proof)    ┌──────────────────┐
+                                                     ────────────────────► │ treasury_vault   │ ──► recipient
+                                                                           └──────────────────┘
+```
+
+1. **Commit.** The admin publishes a Merkle root of approved recipients and a Pedersen commitment to
+   the budget cap (`pedersen_hash(cap, salt)`). Only these two values are public.
+2. **Prove.** For each payment, the proof server builds the Merkle tree, runs the `payroll_compliance`
+   Noir circuit, and generates an UltraHonk proof with Barretenberg.
+3. **Verify.** The proof server checks the proof with `bb verify` before it returns anything.
+4. **Anchor.** The backend registers the proof hash on-chain in `proof_registry`.
+5. **Pay.** `treasury_vault::disburse()` recomputes the expected hash for that exact recipient and
+   amount, checks it is registered and unspent, marks it spent, and transfers the funds.
+
+**What stays private:** the other entries on the allowlist and the exact budget cap.
+**What is public:** the recipient and amount of each payment (they are already visible in the transfer
+itself), the Merkle root, the budget commitment, and the proof record.
 
 ---
 
 ## Repository layout
 
-| Folder | What it is | Stack |
-|--------|-----------|-------|
-| [`contracts/`](contracts) | On-chain layer: treasury vault, payment streaming, ZK proof registry | Rust, Soroban SDK |
-| [`backend/`](backend) | REST API: reads contract state, indexes events, stores campaign metadata, anchors proofs | Node 20, Express, TypeScript, SQLite |
-| [`proof-server/`](proof-server) | Generates and locally verifies UltraHonk proofs for the payroll/budget compliance circuit | Node 22, Noir, Barretenberg |
-
-Each folder is self-contained, with its own README, dependencies and tests.
-
-## How it fits together
-
 ```
-                ┌──────────────────────┐
-  client ─────► │  backend   :4000     │ ── reads (simulation) ──┐
-                │  Express API         │                         ▼
-                └─────────┬────────────┘           ┌──────────────────────────┐
-                          │ POST /api/prove        │  contracts (Soroban)     │
-                          ▼                        │  • treasury_vault        │
-                ┌──────────────────────┐           │  • streaming             │
-                │  proof-server :4100  │           │  • proof_registry        │
-                │  Noir circuit + bb   │           └──────────────────────────┘
-                └─────────┬────────────┘                         ▲
-                          │ verified proof hash                  │
-                          └──── backend signs register_proof() ──┘
+Veil/
+├── contracts/        Soroban smart contracts (Rust)
+│   ├── treasury_vault/   custody: deposits, proof-gated disbursements, stats
+│   ├── streaming/        per-second payment streams with funding reservations
+│   └── proof_registry/   on-chain store of verified proof hashes
+│
+├── backend/          REST API (Node 20, Express, TypeScript, SQLite)
+│   └── src/              contract reads, Horizon event indexing, campaigns, proof anchoring
+│
+├── proof-server/     ZK proof service (Node 22, Noir, Barretenberg)
+│   ├── circuits/         payroll_compliance + hash_util Noir circuits
+│   └── src/              prove + verify API, Merkle tree builder
+│
+└── .github/          per-package CI workflows, Dependabot, CODEOWNERS
 ```
 
-1. The admin publishes a recipient allowlist (as a Merkle root) and a commitment to the budget cap.
-2. For each payment, the **proof server** proves the recipient is on the list and the amount is under
-   the cap, then verifies the proof locally with `bb verify`.
-3. The **backend** anchors the proof hash on-chain via `proof_registry::register_proof()`.
-4. The **contracts** hold the funds, run payment streams, and keep the public proof record.
+Each package is self-contained, with its own README, dependencies and tests:
+
+| Package | Docs | Highlights |
+|---------|------|------------|
+| **contracts** | [contracts/README.md](contracts/README.md) | Proof-gated payouts, double-spend protection, two-step admin transfer, paginated reads |
+| **backend** | [backend/README.md](backend/README.md) | Simulation-based reads (no signing), event history, SQLite with online backups, admin API keys |
+| **proof-server** | [proof-server/README.md](proof-server/README.md) | Real UltraHonk proofs, local verification, rate limits, pinned and checksum-verified toolchain, Docker image |
+
+---
 
 ## Live testnet deployment
 
-| Contract | ID |
-|----------|----|
+| Contract | Address |
+|----------|---------|
 | `treasury_vault` | [`CAUWJPC73YLQMSV6X4QPLUVS2UZFE2PMRIQSSCDN62DNN6J76Y5RETIG`](https://stellar.expert/explorer/testnet/contract/CAUWJPC73YLQMSV6X4QPLUVS2UZFE2PMRIQSSCDN62DNN6J76Y5RETIG) |
 | `streaming` | [`CDU7ZIVQ3UC4K3DHV3NMQGW5UMSYFCKCC6YJKHT4YLNEZJRWL6THE6WQ`](https://stellar.expert/explorer/testnet/contract/CDU7ZIVQ3UC4K3DHV3NMQGW5UMSYFCKCC6YJKHT4YLNEZJRWL6THE6WQ) |
 | `proof_registry` | [`CBDLHQQPKC5524CFWPD4HMPTZGWBYQNW3IKGAFH6IAYBU3F2F6AO2332`](https://stellar.expert/explorer/testnet/contract/CBDLHQQPKC5524CFWPD4HMPTZGWBYQNW3IKGAFH6IAYBU3F2F6AO2332) |
 
-## Quick start
+Amounts are in stroops (1 XLM = 10,000,000 stroops).
 
-Prerequisites: Node 20+ (22 for the proof server), Rust with the `wasm32-unknown-unknown` target, and for
-proofs the pinned `nargo` and `bb` toolchains (see [`proof-server/README.md`](proof-server/README.md#toolchain),
-or use its Docker image).
+---
+
+## API at a glance
+
+The backend runs on `http://localhost:4000`. Full reference: [backend/README.md](backend/README.md#full-api-reference).
+
+| Method | Path | What it does |
+|--------|------|--------------|
+| `GET` | `/health` | Server status and active network |
+| `GET` | `/api/treasury/:contractId/stats` | Vault balance, total raised, total disbursed |
+| `GET` | `/api/treasury/:contractId/transactions` | Paginated on-chain event history |
+| `GET` | `/api/streams` · `/api/streams/:id/claimable` | Payment streams and live claimable amounts |
+| `GET` | `/api/proofs` · `/api/proofs/:id` | Registered proofs |
+| `POST` | `/api/proofs` | **Admin.** Generate a proof and anchor it on-chain |
+| `GET` `POST` | `/api/campaigns` | Campaign metadata (create is admin-only) |
+
+---
+
+## Getting started
+
+### Prerequisites
+
+| Tool | Version | Needed for |
+|------|---------|-----------|
+| Node.js | 20+ (22 for the proof server) | backend, proof-server |
+| Rust + `wasm32-unknown-unknown` | stable | contracts |
+| `nargo` (Noir) | `1.0.0-beta.22` | proof-server |
+| `bb` (Barretenberg) | `5.0.0-nightly.20260522` | proof-server |
+
+The proof server's [Docker image](proof-server/README.md#docker) bundles `nargo` and `bb`, and its README
+has [pinned, checksum-verified install steps](proof-server/README.md#toolchain).
+
+### Run it locally
 
 ```bash
 git clone https://github.com/ndii-dev/Veil.git
 cd Veil
 
-# Contracts: test and build
-cd contracts && cargo test --workspace && cargo build --target wasm32-unknown-unknown --release && cd ..
+# 1. Contracts: run the tests and build the WASM
+cd contracts
+cargo test --workspace
+cargo build --target wasm32-unknown-unknown --release
+cd ..
 
-# Proof server (http://localhost:4100)
-cd proof-server && npm ci
+# 2. Proof server → http://localhost:4100
+cd proof-server
+npm ci
 export PROVE_API_KEYS="$(openssl rand -hex 32)"
 npm start &
 cd ..
 
-# Backend (http://localhost:4000), testnet contract IDs are pre-filled
-cd backend && npm ci && cp .env.example .env && npm run dev
+# 3. Backend → http://localhost:4000 (testnet contract IDs are pre-filled)
+cd backend
+npm ci
+cp .env.example .env
+npm run dev
 ```
 
-Point the backend at the proof server with `PROOF_SERVER_URL` in `backend/.env` (default `http://localhost:4100`).
+Then try it:
+
+```bash
+curl http://localhost:4000/health
+curl http://localhost:4000/api/treasury/default/stats
+```
+
+---
 
 ## Development
 
-| Task | Contracts | Backend | Proof server |
+| Task | contracts | backend | proof-server |
 |------|-----------|---------|--------------|
 | Install | — | `npm ci` | `npm ci` |
 | Test | `cargo test --workspace` | `npm test` | `npm test` |
 | Lint | `cargo clippy` | `npm run lint` | `npm run lint` |
 | Build | `cargo build --target wasm32-unknown-unknown --release` | `npm run build` | — |
 
-CI runs per folder: a change under `backend/` only runs the backend workflow, and so on.
-Dependabot keeps npm, Cargo, Docker and GitHub Actions dependencies current for each package.
+- **CI runs per package.** A change under `backend/` runs only the backend workflow, and so on.
+- **Dependabot** keeps npm, Cargo, Docker and GitHub Actions dependencies up to date for each package.
+- **Guard scripts** in `proof-server/scripts/` reject obfuscated code and whitespace-padded lines in CI.
+
+## Tech stack
+
+**On-chain:** Stellar · Soroban · Rust
+**Zero-knowledge:** Noir · Barretenberg (UltraHonk) · Pedersen hashing · Merkle proofs
+**Off-chain:** Node.js · Express · TypeScript · SQLite · Horizon / Soroban RPC
+**Ops:** GitHub Actions · Docker · Dependabot · Railway
+
+---
+
+## Trust model and limitations
+
+Veil is a working reference implementation running on **testnet**, not audited production software.
+
+- **Proofs are verified off-chain.** Soroban has no native verifier for Noir proofs yet, so the proof
+  server verifies each proof and the contract anchors its hash. The chain trusts the address allowed to
+  call `register_proof()`. Closing that gap needs an on-chain verifier or a multi-party attestation scheme.
+- **Allowlists hold up to 16 recipients** (Merkle depth 4). The depth can be raised in the circuit and the
+  proof server config together.
+- **Recipient ID `0` is reserved** as padding for empty allowlist slots.
+
+See each package's README for the full list.
 
 ## Security
 
-Never commit secret keys or `.env` files. To report a vulnerability, see
-[`SECURITY.md`](SECURITY.md).
+Please don't open public issues for vulnerabilities. Report them privately as described in
+[SECURITY.md](SECURITY.md).
 
 ## License
 
