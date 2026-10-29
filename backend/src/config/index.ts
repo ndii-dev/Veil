@@ -4,6 +4,18 @@ function optional(key: string, fallback: string): string {
   return process.env[key] ?? fallback;
 }
 
+// Reads a non-negative integer, failing at startup on typos like PORT=abc
+// instead of silently running with NaN.
+function int(key: string, fallback: number, min = 0): number {
+  const raw = process.env[key];
+  if (raw === undefined || raw.trim() === '') return fallback;
+  const n = Number(raw);
+  if (!Number.isInteger(n) || n < min) {
+    throw new Error(`${key} must be an integer >= ${min}, got "${raw}"`);
+  }
+  return n;
+}
+
 function list(key: string): string[] {
   return optional(key, '')
     .split(',')
@@ -24,20 +36,20 @@ if (corsOrigins.length === 0) {
 }
 
 export const config = {
-  port: parseInt(optional('PORT', '4000'), 10),
+  port: int('PORT', 4000),
   nodeEnv,
   corsOrigins,
   // Number of reverse-proxy hops in front of the app (e.g. 1 on Railway), so
   // rate limiting keys on the real client IP rather than the proxy's.
-  trustProxy: parseInt(optional('TRUST_PROXY', '0'), 10),
+  trustProxy: int('TRUST_PROXY', 0),
 
   // Bearer token required on admin-only write routes (campaign creation,
   // proof anchoring). Unset = those routes are disabled (503).
   adminApiKey: optional('ADMIN_API_KEY', ''),
 
   rateLimit: {
-    windowMs: parseInt(optional('WRITE_RATE_LIMIT_WINDOW_MS', String(15 * 60 * 1000)), 10),
-    max: parseInt(optional('WRITE_RATE_LIMIT_MAX', '30'), 10),
+    windowMs: int('WRITE_RATE_LIMIT_WINDOW_MS', 15 * 60 * 1000, 1),
+    max: int('WRITE_RATE_LIMIT_MAX', 30, 1),
   },
 
   stellar: {
@@ -55,7 +67,7 @@ export const config = {
   proofs: {
     // shieldfund-proof-server base URL — generates and `bb verify`s proofs.
     serverUrl: optional('PROOF_SERVER_URL', 'http://localhost:4100'),
-    serverTimeoutMs: parseInt(optional('PROOF_SERVER_TIMEOUT_MS', '120000'), 10),
+    serverTimeoutMs: int('PROOF_SERVER_TIMEOUT_MS', 120_000, 1),
     // One of the proof server's PROVE_API_KEYS, sent as X-API-Key. The proof
     // server refuses every /api/prove request without a valid key.
     serverApiKey: optional('PROOF_SERVER_API_KEY', ''),
@@ -68,8 +80,8 @@ export const config = {
   db: {
     // Directory for periodic SQLite snapshots; unset disables them.
     backupDir: optional('DB_BACKUP_DIR', ''),
-    backupIntervalMinutes: parseInt(optional('DB_BACKUP_INTERVAL_MINUTES', '60'), 10),
-    backupKeep: parseInt(optional('DB_BACKUP_KEEP', '48'), 10),
+    backupIntervalMinutes: int('DB_BACKUP_INTERVAL_MINUTES', 60),
+    backupKeep: int('DB_BACKUP_KEEP', 48),
   },
 
   pinata: {
