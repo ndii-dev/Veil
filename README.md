@@ -177,18 +177,20 @@ cargo test --workspace
 cargo build --target wasm32v1-none --release
 cd ..
 
+# One shared key: the proof server accepts it, the backend sends it.
+export PROOF_KEY="$(openssl rand -hex 32)"
+
 # 2. Proof server → http://localhost:4100
 cd proof-server
 npm ci
-export PROVE_API_KEYS="$(openssl rand -hex 32)"
-npm start &
+PROVE_API_KEYS="$PROOF_KEY" npm start &
 cd ..
 
 # 3. Backend → http://localhost:4000 (testnet contract IDs are pre-filled)
 cd backend
 npm ci
 cp .env.example .env
-npm run dev
+PROOF_SERVER_API_KEY="$PROOF_KEY" npm run dev
 ```
 
 Then try it:
