@@ -31,11 +31,18 @@ const proveResponseSchema = z.object({
 export type ProveResponse = z.infer<typeof proveResponseSchema>;
 
 export async function proveWithProofServer(req: ProveRequest): Promise<ProveResponse> {
+  if (!config.proofs.serverApiKey) {
+    throw new HttpError(503, 'PROOF_SERVER_API_KEY not configured');
+  }
+
   let res: Response;
   try {
     res = await fetch(new URL('/api/prove', config.proofs.serverUrl), {
       method: 'POST',
-      headers: { 'content-type': 'application/json' },
+      headers: {
+        'content-type': 'application/json',
+        'x-api-key': config.proofs.serverApiKey,
+      },
       body: JSON.stringify(req),
       signal: AbortSignal.timeout(config.proofs.serverTimeoutMs),
     });
@@ -47,6 +54,10 @@ export async function proveWithProofServer(req: ProveRequest): Promise<ProveResp
 
   // 400 = the circuit rejected the inputs (not on allowlist, over budget, ...).
   if (res.status === 400) throw new HttpError(422, body.error ?? 'Proof generation rejected the inputs');
+  // 401/503 = our key is wrong or the proof server has none configured.
+  if (res.status === 401 || res.status === 503) {
+    throw new HttpError(503, `Proof server refused the request (${res.status}); check PROOF_SERVER_API_KEY`);
+  }
   if (!res.ok) throw new HttpError(502, `Proof server error (${res.status})`);
 
   const parsed = proveResponseSchema.safeParse(body);

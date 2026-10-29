@@ -56,6 +56,9 @@ export const config = {
     // shieldfund-proof-server base URL — generates and `bb verify`s proofs.
     serverUrl: optional('PROOF_SERVER_URL', 'http://localhost:4100'),
     serverTimeoutMs: parseInt(optional('PROOF_SERVER_TIMEOUT_MS', '120000'), 10),
+    // One of the proof server's PROVE_API_KEYS, sent as X-API-Key. The proof
+    // server refuses every /api/prove request without a valid key.
+    serverApiKey: optional('PROOF_SERVER_API_KEY', ''),
     // Secret seed (S...) of the dedicated key that signs register_proof().
     // proof_registry only accepts submissions from its admin address, so this
     // key must be (or be made, via transfer_admin) the registry admin.
