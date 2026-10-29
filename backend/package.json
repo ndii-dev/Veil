@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "description": "ShieldFund Express API backend — off-chain indexing, proof anchoring, and campaign metadata",
   "type": "module",
-  "main": "src/index.ts",
+  "main": "dist/index.js",
   "scripts": {
     "dev": "tsx watch src/index.ts",
     "build": "tsc",
@@ -34,5 +34,8 @@
     "tsx": "^4.21.0",
     "typescript": "~5.8.2",
     "vitest": "^4.1.11"
+  },
+  "engines": {
+    "node": ">=20"
   }
 }
