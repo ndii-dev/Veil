@@ -25,6 +25,12 @@ function list(key: string): string[] {
 
 const nodeEnv = optional('NODE_ENV', 'development');
 
+// Anything but these two would silently fall back to the testnet passphrase.
+const network = optional('STELLAR_NETWORK', 'testnet');
+if (network !== 'testnet' && network !== 'mainnet') {
+  throw new Error(`STELLAR_NETWORK must be "testnet" or "mainnet", got "${network}"`);
+}
+
 // Browser origins allowed to call the API. In development the Vite dev server
 // is allowed by default; in production CORS_ORIGINS must be set explicitly.
 const corsOrigins = list('CORS_ORIGINS');
@@ -53,7 +59,7 @@ export const config = {
   },
 
   stellar: {
-    network: optional('STELLAR_NETWORK', 'testnet') as 'testnet' | 'mainnet',
+    network: network as 'testnet' | 'mainnet',
     horizonUrl: optional('STELLAR_HORIZON_URL', 'https://horizon-testnet.stellar.org'),
     rpcUrl: optional('STELLAR_RPC_URL', 'https://soroban-testnet.stellar.org'),
   },
