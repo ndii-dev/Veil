@@ -1,7 +1,7 @@
 #![no_std]
 use soroban_sdk::{
-    contract, contracterror, contractimpl, contracttype, symbol_short, vec,
-    token, Address, Bytes, BytesN, Env, IntoVal, Symbol, U256,
+    contract, contracterror, contractimpl, contracttype, symbol_short, token, vec, Address, Bytes,
+    BytesN, Env, IntoVal, Symbol, U256,
 };
 
 // ── Storage keys ──────────────────────────────────────────────────────────────
@@ -94,7 +94,10 @@ fn recipient_field(env: &Env, recipient: &Address) -> Result<BytesN<32>, Error> 
     strkey.copy_into_slice(&mut buf);
     let digest: Bytes = env.crypto().keccak256(&Bytes::from_slice(env, &buf)).into();
     let modulus = U256::from_be_bytes(env, &Bytes::from_array(env, &FIELD_MODULUS));
-    Ok(field_bytes(env, &U256::from_be_bytes(env, &digest).rem_euclid(&modulus)))
+    Ok(field_bytes(
+        env,
+        &U256::from_be_bytes(env, &digest).rem_euclid(&modulus),
+    ))
 }
 
 fn field_bytes(env: &Env, value: &U256) -> BytesN<32> {
@@ -183,8 +186,12 @@ impl TreasuryVaultContract {
     pub fn __constructor(env: Env, admin: Address, usdc_token: Address) {
         env.storage().instance().set(&DataKey::Admin, &admin);
         env.storage().instance().set(&DataKey::Token, &usdc_token);
-        env.storage().persistent().set(&DataKey::TotalRaised, &0i128);
-        env.storage().persistent().set(&DataKey::TotalDisbursed, &0i128);
+        env.storage()
+            .persistent()
+            .set(&DataKey::TotalRaised, &0i128);
+        env.storage()
+            .persistent()
+            .set(&DataKey::TotalDisbursed, &0i128);
         bump_instance(&env);
         bump_persistent(&env, &DataKey::TotalRaised);
         bump_persistent(&env, &DataKey::TotalDisbursed);
@@ -242,9 +249,12 @@ impl TreasuryVaultContract {
     pub fn set_proof_registry(env: Env, registry: Address) {
         let admin = admin(&env);
         admin.require_auth();
-        env.storage().instance().set(&DataKey::ProofRegistry, &registry);
+        env.storage()
+            .instance()
+            .set(&DataKey::ProofRegistry, &registry);
         bump_instance(&env);
-        env.events().publish((symbol_short!("reg_set"), admin), registry);
+        env.events()
+            .publish((symbol_short!("reg_set"), admin), registry);
     }
 
     pub fn get_proof_registry(env: Env) -> Result<Address, Error> {
@@ -376,7 +386,9 @@ impl TreasuryVaultContract {
 
     /// True if this proof has already paid out a disbursement.
     pub fn is_proof_spent(env: Env, proof_hash: BytesN<32>) -> bool {
-        env.storage().persistent().has(&DataKey::SpentProof(proof_hash))
+        env.storage()
+            .persistent()
+            .has(&DataKey::SpentProof(proof_hash))
     }
 
     pub fn get_admin(env: Env) -> Address {
@@ -396,9 +408,12 @@ impl TreasuryVaultContract {
     pub fn propose_admin(env: Env, new_admin: Address) {
         let admin = admin(&env);
         admin.require_auth();
-        env.storage().instance().set(&DataKey::PendingAdmin, &new_admin);
+        env.storage()
+            .instance()
+            .set(&DataKey::PendingAdmin, &new_admin);
         bump_instance(&env);
-        env.events().publish((symbol_short!("adm_prop"), admin), new_admin);
+        env.events()
+            .publish((symbol_short!("adm_prop"), admin), new_admin);
     }
 
     /// Step 2 (nominee): accept the admin role. Requires the nominee's auth.
@@ -416,7 +431,8 @@ impl TreasuryVaultContract {
         env.storage().instance().set(&DataKey::Admin, &pending);
         env.storage().instance().remove(&DataKey::PendingAdmin);
         bump_instance(&env);
-        env.events().publish((symbol_short!("adm_acpt"), pending), previous);
+        env.events()
+            .publish((symbol_short!("adm_acpt"), pending), previous);
         Ok(())
     }
 
@@ -434,7 +450,8 @@ impl TreasuryVaultContract {
             .ok_or(Error::NoPendingAdmin)?;
         env.storage().instance().remove(&DataKey::PendingAdmin);
         bump_instance(&env);
-        env.events().publish((symbol_short!("adm_cncl"), admin), pending);
+        env.events()
+            .publish((symbol_short!("adm_cncl"), admin), pending);
         Ok(())
     }
 
@@ -467,7 +484,9 @@ mod tests {
     fn setup(env: &Env) -> Setup<'_> {
         let admin = Address::generate(env);
 
-        let token_id = env.register_stellar_asset_contract_v2(admin.clone()).address();
+        let token_id = env
+            .register_stellar_asset_contract_v2(admin.clone())
+            .address();
         let token = TokenClient::new(env, &token_id);
         let token_admin = StellarAssetClient::new(env, &token_id);
 
@@ -477,7 +496,13 @@ mod tests {
         let registry_id = env.register(ProofRegistryContract, (admin.clone(),));
         let registry = proof_registry::ProofRegistryContractClient::new(env, &registry_id);
 
-        Setup { vault, registry, token, token_admin, admin }
+        Setup {
+            vault,
+            registry,
+            token,
+            token_admin,
+            admin,
+        }
     }
 
     fn fund_vault(env: &Env, setup: &Setup, amount: i128) {
@@ -572,7 +597,11 @@ mod tests {
         let res = env.try_invoke_contract::<(), soroban_sdk::Error>(
             &setup.vault.address,
             &Symbol::new(&env, "initialize"),
-            vec![&env, attacker.into_val(&env), setup.token.address.into_val(&env)],
+            vec![
+                &env,
+                attacker.into_val(&env),
+                setup.token.address.into_val(&env),
+            ],
         );
         assert!(res.is_err());
         assert_eq!(setup.vault.get_admin(), setup.admin);
@@ -582,8 +611,24 @@ mod tests {
     fn hashing_matches_proof_server() {
         let env = Env::default();
         let cases = [
-            (G_RECIPIENT, G_RECIPIENT_FIELD, [G_PIH_500000_PAYROLL, G_PIH_500000_OPERATIONAL, G_PIH_499999_PAYROLL]),
-            (RECIPIENT, RECIPIENT_FIELD, [PIH_500000_PAYROLL, PIH_500000_OPERATIONAL, PIH_499999_PAYROLL]),
+            (
+                G_RECIPIENT,
+                G_RECIPIENT_FIELD,
+                [
+                    G_PIH_500000_PAYROLL,
+                    G_PIH_500000_OPERATIONAL,
+                    G_PIH_499999_PAYROLL,
+                ],
+            ),
+            (
+                RECIPIENT,
+                RECIPIENT_FIELD,
+                [
+                    PIH_500000_PAYROLL,
+                    PIH_500000_OPERATIONAL,
+                    PIH_499999_PAYROLL,
+                ],
+            ),
         ];
         for (strkey, field, [payroll, operational, smaller]) in cases {
             let who = address(&env, strkey);
@@ -598,7 +643,10 @@ mod tests {
     }
 
     fn try_pay(setup: &Setup, env: &Env, amount: i128, hash: &BytesN<32>) -> Result<(), Error> {
-        match setup.vault.try_disburse(&recipient(env), &amount, hash, &root(env), &commitment(env)) {
+        match setup
+            .vault
+            .try_disburse(&recipient(env), &amount, hash, &root(env), &commitment(env))
+        {
             Ok(_) => Ok(()),
             Err(Ok(e)) => Err(e),
             Err(Err(e)) => panic!("unexpected host error: {e:?}"),
@@ -612,8 +660,14 @@ mod tests {
         let setup = setup(&env);
         fund_vault(&env, &setup, 1_000_000);
 
-        assert_eq!(try_pay(&setup, &env, 500_000, &some_hash(&env, 1)), Err(Error::RegistryNotConfigured));
-        assert_eq!(setup.vault.try_get_proof_registry(), Err(Ok(Error::RegistryNotConfigured)));
+        assert_eq!(
+            try_pay(&setup, &env, 500_000, &some_hash(&env, 1)),
+            Err(Error::RegistryNotConfigured)
+        );
+        assert_eq!(
+            setup.vault.try_get_proof_registry(),
+            Err(Ok(Error::RegistryNotConfigured))
+        );
     }
 
     #[test]
@@ -624,7 +678,10 @@ mod tests {
         fund_vault(&env, &setup, 1_000_000);
         setup.vault.set_proof_registry(&setup.registry.address);
 
-        assert_eq!(try_pay(&setup, &env, 500_000, &some_hash(&env, 1)), Err(Error::ProofNotRegistered));
+        assert_eq!(
+            try_pay(&setup, &env, 500_000, &some_hash(&env, 1)),
+            Err(Error::ProofNotRegistered)
+        );
     }
 
     #[test]
@@ -633,12 +690,25 @@ mod tests {
         env.mock_all_auths();
         let hash = some_hash(&env, 1);
         let setup = ready(&env, &hash, PIH_500000_PAYROLL, "payroll");
-        setup.vault.disburse(&recipient(&env), &500_000, &hash, &root(&env), &commitment(&env));
+        setup.vault.disburse(
+            &recipient(&env),
+            &500_000,
+            &hash,
+            &root(&env),
+            &commitment(&env),
+        );
 
         env.as_contract(&setup.vault.address, || {
             assert_eq!(env.storage().instance().get_ttl(), INSTANCE_TTL_EXTEND);
-            for key in [DataKey::TotalRaised, DataKey::TotalDisbursed, DataKey::SpentProof(hash.clone())] {
-                assert_eq!(env.storage().persistent().get_ttl(&key), PERSISTENT_TTL_EXTEND);
+            for key in [
+                DataKey::TotalRaised,
+                DataKey::TotalDisbursed,
+                DataKey::SpentProof(hash.clone()),
+            ] {
+                assert_eq!(
+                    env.storage().persistent().get_ttl(&key),
+                    PERSISTENT_TTL_EXTEND
+                );
             }
         });
     }
@@ -651,11 +721,24 @@ mod tests {
         let setup = ready(&env, &hash, PIH_500000_PAYROLL, "payroll");
 
         assert!(!setup.vault.is_proof_spent(&hash));
-        setup.vault.disburse(&recipient(&env), &500_000, &hash, &root(&env), &commitment(&env));
+        setup.vault.disburse(
+            &recipient(&env),
+            &500_000,
+            &hash,
+            &root(&env),
+            &commitment(&env),
+        );
 
         // events().all() covers the most recent invocation, so check it first.
         let (_, topics, data) = env.events().all().last().unwrap();
-        assert_eq!(topics, vec![&env, symbol_short!("disburse").into_val(&env), recipient(&env).into_val(&env)]);
+        assert_eq!(
+            topics,
+            vec![
+                &env,
+                symbol_short!("disburse").into_val(&env),
+                recipient(&env).into_val(&env)
+            ]
+        );
         let data: (i128, BytesN<32>) = data.into_val(&env);
         assert_eq!(data, (500_000, hash.clone()));
 
@@ -671,8 +754,17 @@ mod tests {
         let hash = some_hash(&env, 1);
         let setup = ready(&env, &hash, PIH_500000_PAYROLL, "payroll");
 
-        setup.vault.disburse(&recipient(&env), &500_000, &hash, &root(&env), &commitment(&env));
-        assert_eq!(try_pay(&setup, &env, 500_000, &hash), Err(Error::ProofAlreadySpent));
+        setup.vault.disburse(
+            &recipient(&env),
+            &500_000,
+            &hash,
+            &root(&env),
+            &commitment(&env),
+        );
+        assert_eq!(
+            try_pay(&setup, &env, 500_000, &hash),
+            Err(Error::ProofAlreadySpent)
+        );
     }
 
     #[test]
@@ -682,7 +774,10 @@ mod tests {
         let hash = some_hash(&env, 1);
         let setup = ready(&env, &hash, PIH_499999_PAYROLL, "payroll");
 
-        assert_eq!(try_pay(&setup, &env, 500_000, &hash), Err(Error::ProofMismatch));
+        assert_eq!(
+            try_pay(&setup, &env, 500_000, &hash),
+            Err(Error::ProofMismatch)
+        );
     }
 
     #[test]
@@ -692,7 +787,13 @@ mod tests {
         let hash = some_hash(&env, 1);
         let setup = ready(&env, &hash, PIH_500000_PAYROLL, "payroll");
 
-        let res = setup.vault.try_disburse(&address(&env, G_RECIPIENT), &500_000, &hash, &root(&env), &commitment(&env));
+        let res = setup.vault.try_disburse(
+            &address(&env, G_RECIPIENT),
+            &500_000,
+            &hash,
+            &root(&env),
+            &commitment(&env),
+        );
         assert_eq!(res, Err(Ok(Error::ProofMismatch)));
     }
 
@@ -704,7 +805,10 @@ mod tests {
         // Hash was computed for "operational" but the proof is registered as "payroll".
         let setup = ready(&env, &hash, PIH_500000_OPERATIONAL, "payroll");
 
-        assert_eq!(try_pay(&setup, &env, 500_000, &hash), Err(Error::ProofMismatch));
+        assert_eq!(
+            try_pay(&setup, &env, 500_000, &hash),
+            Err(Error::ProofMismatch)
+        );
     }
 
     #[test]
@@ -714,7 +818,13 @@ mod tests {
         let hash = some_hash(&env, 1);
         let setup = ready(&env, &hash, PIH_500000_PAYROLL, "payroll");
 
-        let res = setup.vault.try_disburse(&recipient(&env), &500_000, &hash, &some_hash(&env, 0x33), &commitment(&env));
+        let res = setup.vault.try_disburse(
+            &recipient(&env),
+            &500_000,
+            &hash,
+            &some_hash(&env, 0x33),
+            &commitment(&env),
+        );
         assert_eq!(res, Err(Ok(Error::ProofMismatch)));
     }
 
@@ -728,7 +838,13 @@ mod tests {
         assert!(try_pay(&setup, &env, 499_999, &hash).is_err());
         assert!(!setup.vault.is_proof_spent(&hash));
 
-        setup.vault.disburse(&recipient(&env), &500_000, &hash, &root(&env), &commitment(&env));
+        setup.vault.disburse(
+            &recipient(&env),
+            &500_000,
+            &hash,
+            &root(&env),
+            &commitment(&env),
+        );
         assert_eq!(setup.token.balance(&recipient(&env)), 500_000);
     }
 
@@ -743,7 +859,10 @@ mod tests {
         setup.token_admin.mint(&depositor, &100);
 
         for amount in [0i128, -1, i128::MIN] {
-            assert_eq!(setup.vault.try_deposit(&depositor, &amount), Err(Ok(Error::InvalidAmount)));
+            assert_eq!(
+                setup.vault.try_deposit(&depositor, &amount),
+                Err(Ok(Error::InvalidAmount))
+            );
         }
         assert_eq!(setup.token.balance(&depositor), 100);
         assert_eq!(setup.vault.get_stats().total_raised, 0);
@@ -759,7 +878,14 @@ mod tests {
 
         setup.vault.deposit(&depositor, &100);
         let (_, topics, data) = env.events().all().last().unwrap();
-        assert_eq!(topics, vec![&env, symbol_short!("deposit").into_val(&env), depositor.into_val(&env)]);
+        assert_eq!(
+            topics,
+            vec![
+                &env,
+                symbol_short!("deposit").into_val(&env),
+                depositor.into_val(&env)
+            ]
+        );
         let amount: i128 = data.into_val(&env);
         assert_eq!(amount, 100);
 
@@ -781,8 +907,15 @@ mod tests {
         setup.vault.deposit(&whale, &i128::MAX);
         assert_eq!(setup.vault.get_stats().total_raised, i128::MAX);
 
-        assert_eq!(setup.vault.try_deposit(&other, &1), Err(Ok(Error::Overflow)));
-        assert_eq!(setup.token.balance(&other), 1, "failed deposit must not move funds");
+        assert_eq!(
+            setup.vault.try_deposit(&other, &1),
+            Err(Ok(Error::Overflow))
+        );
+        assert_eq!(
+            setup.token.balance(&other),
+            1,
+            "failed deposit must not move funds"
+        );
     }
 
     #[test]
@@ -793,7 +926,10 @@ mod tests {
         let setup = ready(&env, &hash, PIH_500000_PAYROLL, "payroll");
 
         for amount in [0i128, -500_000, i128::MIN] {
-            assert_eq!(try_pay(&setup, &env, amount, &hash), Err(Error::InvalidAmount));
+            assert_eq!(
+                try_pay(&setup, &env, amount, &hash),
+                Err(Error::InvalidAmount)
+            );
         }
         assert!(!setup.vault.is_proof_spent(&hash));
     }
@@ -806,9 +942,17 @@ mod tests {
         let setup = setup(&env);
         fund_vault(&env, &setup, 100_000);
         setup.vault.set_proof_registry(&setup.registry.address);
-        setup.registry.register_proof(&setup.admin, &hash, &hex32(&env, PIH_500000_PAYROLL), &Symbol::new(&env, "payroll"));
+        setup.registry.register_proof(
+            &setup.admin,
+            &hash,
+            &hex32(&env, PIH_500000_PAYROLL),
+            &Symbol::new(&env, "payroll"),
+        );
 
-        assert_eq!(try_pay(&setup, &env, 500_000, &hash), Err(Error::InsufficientBalance));
+        assert_eq!(
+            try_pay(&setup, &env, 500_000, &hash),
+            Err(Error::InsufficientBalance)
+        );
         assert!(!setup.vault.is_proof_spent(&hash));
     }
 
@@ -820,9 +964,20 @@ mod tests {
         let setup = setup(&env);
         fund_vault(&env, &setup, 500_000);
         setup.vault.set_proof_registry(&setup.registry.address);
-        setup.registry.register_proof(&setup.admin, &hash, &hex32(&env, PIH_500000_PAYROLL), &Symbol::new(&env, "payroll"));
+        setup.registry.register_proof(
+            &setup.admin,
+            &hash,
+            &hex32(&env, PIH_500000_PAYROLL),
+            &Symbol::new(&env, "payroll"),
+        );
 
-        setup.vault.disburse(&recipient(&env), &500_000, &hash, &root(&env), &commitment(&env));
+        setup.vault.disburse(
+            &recipient(&env),
+            &500_000,
+            &hash,
+            &root(&env),
+            &commitment(&env),
+        );
         assert_eq!(setup.vault.get_balance(), 0);
     }
 
@@ -834,7 +989,16 @@ mod tests {
         let setup = ready(&env, &hash, PIH_500000_PAYROLL, "payroll");
         env.set_auths(&[]);
 
-        assert!(setup.vault.try_disburse(&recipient(&env), &500_000, &hash, &root(&env), &commitment(&env)).is_err());
+        assert!(setup
+            .vault
+            .try_disburse(
+                &recipient(&env),
+                &500_000,
+                &hash,
+                &root(&env),
+                &commitment(&env)
+            )
+            .is_err());
         assert!(!setup.vault.is_proof_spent(&hash));
     }
 
@@ -848,7 +1012,14 @@ mod tests {
 
         setup.vault.set_proof_registry(&setup.registry.address);
         let (_, topics, data) = env.events().all().last().unwrap();
-        assert_eq!(topics, vec![&env, symbol_short!("reg_set").into_val(&env), setup.admin.into_val(&env)]);
+        assert_eq!(
+            topics,
+            vec![
+                &env,
+                symbol_short!("reg_set").into_val(&env),
+                setup.admin.into_val(&env)
+            ]
+        );
         let registry: Address = data.into_val(&env);
         assert_eq!(registry, setup.registry.address);
         assert_eq!(setup.vault.get_proof_registry(), setup.registry.address);
@@ -868,7 +1039,10 @@ mod tests {
         setup.vault.accept_admin();
         assert_eq!(setup.vault.get_admin(), next);
         assert_eq!(setup.vault.get_pending_admin(), None);
-        assert_eq!(setup.vault.try_accept_admin(), Err(Ok(Error::NoPendingAdmin)));
+        assert_eq!(
+            setup.vault.try_accept_admin(),
+            Err(Ok(Error::NoPendingAdmin))
+        );
     }
 
     #[test]
@@ -889,7 +1063,10 @@ mod tests {
         env.mock_all_auths();
         let setup = setup(&env);
 
-        assert_eq!(setup.vault.try_cancel_admin_transfer(), Err(Ok(Error::NoPendingAdmin)));
+        assert_eq!(
+            setup.vault.try_cancel_admin_transfer(),
+            Err(Ok(Error::NoPendingAdmin))
+        );
         setup.vault.propose_admin(&Address::generate(&env));
         setup.vault.cancel_admin_transfer();
         assert_eq!(setup.vault.get_pending_admin(), None);

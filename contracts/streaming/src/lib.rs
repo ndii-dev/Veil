@@ -1,7 +1,6 @@
 #![no_std]
 use soroban_sdk::{
-    contract, contracterror, contractimpl, contracttype, symbol_short,
-    token, Address, Env, Vec,
+    contract, contracterror, contractimpl, contracttype, symbol_short, token, Address, Env, Vec,
 };
 
 // ── Storage keys ──────────────────────────────────────────────────────────────
@@ -111,7 +110,9 @@ fn bump_instance(env: &Env) {
 
 /// Extends `key` to at least `ledgers` from now (capped at the network max).
 fn bump_persistent_for(env: &Env, key: &DataKey, ledgers: u32) {
-    let extend_to = ledgers.max(PERSISTENT_TTL_EXTEND).min(env.storage().max_ttl());
+    let extend_to = ledgers
+        .max(PERSISTENT_TTL_EXTEND)
+        .min(env.storage().max_ttl());
     env.storage()
         .persistent()
         .extend_ttl(key, extend_to.saturating_sub(DAY_IN_LEDGERS), extend_to);
@@ -125,7 +126,9 @@ fn bump_persistent(env: &Env, key: &DataKey) {
 /// 30-day grace period for the recipient to withdraw.
 fn bump_stream(env: &Env, stream: &Stream) {
     let remaining = stream.end_time.saturating_sub(env.ledger().timestamp()) / SECONDS_PER_LEDGER;
-    let ledgers = u32::try_from(remaining).unwrap_or(u32::MAX).saturating_add(30 * DAY_IN_LEDGERS);
+    let ledgers = u32::try_from(remaining)
+        .unwrap_or(u32::MAX)
+        .saturating_add(30 * DAY_IN_LEDGERS);
     bump_persistent_for(env, &DataKey::Stream(stream.id), ledgers);
     let reserved_key = DataKey::Reserved(stream.id);
     if env.storage().persistent().has(&reserved_key) {
@@ -134,11 +137,17 @@ fn bump_stream(env: &Env, stream: &Stream) {
 }
 
 fn committed(env: &Env) -> i128 {
-    env.storage().persistent().get(&DataKey::Committed).unwrap_or(0)
+    env.storage()
+        .persistent()
+        .get(&DataKey::Committed)
+        .unwrap_or(0)
 }
 
 fn reserved(env: &Env, stream_id: u32) -> i128 {
-    env.storage().persistent().get(&DataKey::Reserved(stream_id)).unwrap_or(0)
+    env.storage()
+        .persistent()
+        .get(&DataKey::Reserved(stream_id))
+        .unwrap_or(0)
 }
 
 fn token_balance(env: &Env) -> i128 {
@@ -151,9 +160,13 @@ fn token_balance(env: &Env) -> i128 {
 fn release(env: &Env, stream_id: u32, amount: i128) {
     let left = reserved(env, stream_id).saturating_sub(amount).max(0);
     if left == 0 {
-        env.storage().persistent().remove(&DataKey::Reserved(stream_id));
+        env.storage()
+            .persistent()
+            .remove(&DataKey::Reserved(stream_id));
     } else {
-        env.storage().persistent().set(&DataKey::Reserved(stream_id), &left);
+        env.storage()
+            .persistent()
+            .set(&DataKey::Reserved(stream_id), &left);
     }
     let total = committed(env).saturating_sub(amount).max(0);
     env.storage().persistent().set(&DataKey::Committed, &total);
@@ -191,8 +204,10 @@ fn settle(env: &Env, stream_id: u32, mut stream: Stream, now: u64) -> Result<i12
     bump_stream(env, &stream);
     bump_instance(env);
 
-    env.events()
-        .publish((symbol_short!("s_wdraw"), stream_id), (stream.recipient.clone(), payout));
+    env.events().publish(
+        (symbol_short!("s_wdraw"), stream_id),
+        (stream.recipient.clone(), payout),
+    );
     if completed {
         env.events()
             .publish((symbol_short!("s_done"), stream_id), stream.recipient);
@@ -218,7 +233,10 @@ fn owed(stream: &Stream, now: u64) -> Result<i128, Error> {
             let accrued = (elapsed as i128)
                 .checked_mul(stream.flow_rate_per_second)
                 .ok_or(Error::Overflow)?;
-            stream.accumulated.checked_add(accrued).ok_or(Error::Overflow)
+            stream
+                .accumulated
+                .checked_add(accrued)
+                .ok_or(Error::Overflow)
         }
         StreamStatus::Paused | StreamStatus::Completed => Ok(stream.accumulated),
     }
@@ -280,11 +298,17 @@ impl StreamingContract {
         if token_balance(&env).saturating_sub(committed_now) < total_needed {
             return Err(Error::InsufficientBalance);
         }
-        let new_committed = committed_now.checked_add(total_needed).ok_or(Error::Overflow)?;
+        let new_committed = committed_now
+            .checked_add(total_needed)
+            .ok_or(Error::Overflow)?;
 
         let id = Self::get_stream_count(env.clone());
-        env.storage().persistent().set(&DataKey::Committed, &new_committed);
-        env.storage().persistent().set(&DataKey::Reserved(id), &total_needed);
+        env.storage()
+            .persistent()
+            .set(&DataKey::Committed, &new_committed);
+        env.storage()
+            .persistent()
+            .set(&DataKey::Reserved(id), &total_needed);
 
         let stream = Stream {
             id,
@@ -349,8 +373,10 @@ impl StreamingContract {
         bump_stream(&env, &stream);
         bump_instance(&env);
 
-        env.events()
-            .publish((symbol_short!("s_toggle"), stream_id), stream.status.clone());
+        env.events().publish(
+            (symbol_short!("s_toggle"), stream_id),
+            stream.status.clone(),
+        );
 
         Ok(stream.status)
     }
@@ -428,9 +454,14 @@ impl StreamingContract {
             return Err(Error::InsufficientBalance);
         }
         let token_addr: Address = env.storage().instance().get(&DataKey::Token).unwrap();
-        token::Client::new(&env, &token_addr).transfer(&env.current_contract_address(), &to, &amount);
+        token::Client::new(&env, &token_addr).transfer(
+            &env.current_contract_address(),
+            &to,
+            &amount,
+        );
         bump_instance(&env);
-        env.events().publish((symbol_short!("reclaim"), admin), (to, amount));
+        env.events()
+            .publish((symbol_short!("reclaim"), admin), (to, amount));
         Ok(())
     }
 
@@ -471,10 +502,16 @@ impl StreamingContract {
         if limit == 0 || limit > MAX_PAGE_SIZE {
             return Err(Error::InvalidPageSize);
         }
-        let end = start.saturating_add(limit).min(Self::get_stream_count(env.clone()));
+        let end = start
+            .saturating_add(limit)
+            .min(Self::get_stream_count(env.clone()));
         let mut streams = Vec::new(&env);
         for i in start..end {
-            if let Some(s) = env.storage().persistent().get::<DataKey, Stream>(&DataKey::Stream(i)) {
+            if let Some(s) = env
+                .storage()
+                .persistent()
+                .get::<DataKey, Stream>(&DataKey::Stream(i))
+            {
                 streams.push_back(s);
             }
         }
@@ -518,9 +555,12 @@ impl StreamingContract {
     pub fn propose_admin(env: Env, new_admin: Address) {
         let admin = admin(&env);
         admin.require_auth();
-        env.storage().instance().set(&DataKey::PendingAdmin, &new_admin);
+        env.storage()
+            .instance()
+            .set(&DataKey::PendingAdmin, &new_admin);
         bump_instance(&env);
-        env.events().publish((symbol_short!("adm_prop"), admin), new_admin);
+        env.events()
+            .publish((symbol_short!("adm_prop"), admin), new_admin);
     }
 
     /// Step 2 (nominee): accept the admin role. Requires the nominee's auth.
@@ -538,7 +578,8 @@ impl StreamingContract {
         env.storage().instance().set(&DataKey::Admin, &pending);
         env.storage().instance().remove(&DataKey::PendingAdmin);
         bump_instance(&env);
-        env.events().publish((symbol_short!("adm_acpt"), pending), previous);
+        env.events()
+            .publish((symbol_short!("adm_acpt"), pending), previous);
         Ok(())
     }
 
@@ -556,7 +597,8 @@ impl StreamingContract {
             .ok_or(Error::NoPendingAdmin)?;
         env.storage().instance().remove(&DataKey::PendingAdmin);
         bump_instance(&env);
-        env.events().publish((symbol_short!("adm_cncl"), admin), pending);
+        env.events()
+            .publish((symbol_short!("adm_cncl"), admin), pending);
         Ok(())
     }
 
@@ -591,7 +633,9 @@ mod tests {
     fn deploy(env: &Env) -> Setup<'_> {
         env.ledger().with_mut(|l| l.timestamp = T0);
         let admin = Address::generate(env);
-        let token_id = env.register_stellar_asset_contract_v2(admin.clone()).address();
+        let token_id = env
+            .register_stellar_asset_contract_v2(admin.clone())
+            .address();
         let id = env.register(StreamingContract, (admin.clone(), token_id.clone()));
         Setup {
             client: StreamingContractClient::new(env, &id),
@@ -618,7 +662,12 @@ mod tests {
         let (setup, _, id) = funded_stream(&env);
         env.as_contract(&setup.client.address, || {
             assert_eq!(env.storage().instance().get_ttl(), INSTANCE_TTL_EXTEND);
-            for key in [DataKey::StreamCount, DataKey::Committed, DataKey::Stream(id), DataKey::Reserved(id)] {
+            for key in [
+                DataKey::StreamCount,
+                DataKey::Committed,
+                DataKey::Stream(id),
+                DataKey::Reserved(id),
+            ] {
                 assert!(env.storage().persistent().get_ttl(&key) >= PERSISTENT_TTL_EXTEND);
             }
         });
@@ -631,14 +680,24 @@ mod tests {
         let setup = deploy(&env);
         let days: u64 = 200;
         let duration = days * 86_400;
-        setup.token_admin.mint(&setup.client.address, &(duration as i128));
-        let id = setup.client.create_stream(&Address::generate(&env), &1, &(T0 + duration));
+        setup
+            .token_admin
+            .mint(&setup.client.address, &(duration as i128));
+        let id = setup
+            .client
+            .create_stream(&Address::generate(&env), &1, &(T0 + duration));
 
         let wanted = (duration / SECONDS_PER_LEDGER) as u32 + 30 * DAY_IN_LEDGERS;
         env.as_contract(&setup.client.address, || {
             let expected = wanted.min(env.storage().max_ttl());
-            assert_eq!(env.storage().persistent().get_ttl(&DataKey::Stream(id)), expected);
-            assert_eq!(env.storage().persistent().get_ttl(&DataKey::Reserved(id)), expected);
+            assert_eq!(
+                env.storage().persistent().get_ttl(&DataKey::Stream(id)),
+                expected
+            );
+            assert_eq!(
+                env.storage().persistent().get_ttl(&DataKey::Reserved(id)),
+                expected
+            );
         });
     }
 
@@ -646,9 +705,13 @@ mod tests {
     fn funded_stream<'a>(env: &'a Env) -> (Setup<'a>, Address, u32) {
         env.mock_all_auths();
         let setup = deploy(env);
-        setup.token_admin.mint(&setup.client.address, &(RATE * DURATION as i128));
+        setup
+            .token_admin
+            .mint(&setup.client.address, &(RATE * DURATION as i128));
         let recipient = Address::generate(env);
-        let id = setup.client.create_stream(&recipient, &RATE, &(T0 + DURATION));
+        let id = setup
+            .client
+            .create_stream(&recipient, &RATE, &(T0 + DURATION));
         (setup, recipient, id)
     }
 
@@ -668,7 +731,11 @@ mod tests {
         let res = env.try_invoke_contract::<(), soroban_sdk::Error>(
             &setup.client.address,
             &Symbol::new(&env, "initialize"),
-            vec![&env, attacker.clone().into_val(&env), attacker.into_val(&env)],
+            vec![
+                &env,
+                attacker.clone().into_val(&env),
+                attacker.into_val(&env),
+            ],
         );
         assert!(res.is_err());
     }
@@ -683,9 +750,18 @@ mod tests {
         setup.token_admin.mint(&setup.client.address, &100_000);
         let recipient = Address::generate(&env);
 
-        let id = setup.client.create_stream(&recipient, &RATE, &(T0 + DURATION));
+        let id = setup
+            .client
+            .create_stream(&recipient, &RATE, &(T0 + DURATION));
         let (_, topics, data) = env.events().all().last().unwrap();
-        assert_eq!(topics, vec![&env, symbol_short!("s_create").into_val(&env), recipient.into_val(&env)]);
+        assert_eq!(
+            topics,
+            vec![
+                &env,
+                symbol_short!("s_create").into_val(&env),
+                recipient.into_val(&env)
+            ]
+        );
         let data: (u32, i128, u64) = data.into_val(&env);
         assert_eq!(data, (id, RATE, T0 + DURATION));
         assert_eq!(setup.client.get_stream_count(), 1);
@@ -699,7 +775,9 @@ mod tests {
         let recipient = Address::generate(&env);
         for rate in [0i128, -1, i128::MIN] {
             assert_eq!(
-                setup.client.try_create_stream(&recipient, &rate, &(T0 + DURATION)),
+                setup
+                    .client
+                    .try_create_stream(&recipient, &rate, &(T0 + DURATION)),
                 Err(Ok(Error::InvalidFlowRate)),
             );
         }
@@ -727,7 +805,9 @@ mod tests {
         let recipient = Address::generate(&env);
         // i128::MAX per second for 2 seconds overflows i128.
         assert_eq!(
-            setup.client.try_create_stream(&recipient, &i128::MAX, &(T0 + 2)),
+            setup
+                .client
+                .try_create_stream(&recipient, &i128::MAX, &(T0 + 2)),
             Err(Ok(Error::Overflow)),
         );
         assert_eq!(
@@ -741,15 +821,21 @@ mod tests {
         let env = Env::default();
         env.mock_all_auths();
         let setup = deploy(&env);
-        setup.token_admin.mint(&setup.client.address, &(RATE * DURATION as i128 - 1));
+        setup
+            .token_admin
+            .mint(&setup.client.address, &(RATE * DURATION as i128 - 1));
         let recipient = Address::generate(&env);
 
         assert_eq!(
-            setup.client.try_create_stream(&recipient, &RATE, &(T0 + DURATION)),
+            setup
+                .client
+                .try_create_stream(&recipient, &RATE, &(T0 + DURATION)),
             Err(Ok(Error::InsufficientBalance)),
         );
         setup.token_admin.mint(&setup.client.address, &1);
-        setup.client.create_stream(&recipient, &RATE, &(T0 + DURATION));
+        setup
+            .client
+            .create_stream(&recipient, &RATE, &(T0 + DURATION));
     }
 
     #[test]
@@ -757,7 +843,10 @@ mod tests {
         let env = Env::default();
         let setup = deploy(&env);
         let recipient = Address::generate(&env);
-        assert!(setup.client.try_create_stream(&recipient, &RATE, &(T0 + DURATION)).is_err());
+        assert!(setup
+            .client
+            .try_create_stream(&recipient, &RATE, &(T0 + DURATION))
+            .is_err());
     }
 
     // ── Accrual & end-time boundaries ────────────────────────────────────────
@@ -809,11 +898,25 @@ mod tests {
         let events = env.events().all();
         let n = events.len();
         let (_, wdraw_topics, wdraw_data) = events.get(n - 2).unwrap();
-        assert_eq!(wdraw_topics, vec![&env, symbol_short!("s_wdraw").into_val(&env), id.into_val(&env)]);
+        assert_eq!(
+            wdraw_topics,
+            vec![
+                &env,
+                symbol_short!("s_wdraw").into_val(&env),
+                id.into_val(&env)
+            ]
+        );
         let wdraw: (Address, i128) = wdraw_data.into_val(&env);
         assert_eq!(wdraw, (recipient.clone(), paid));
         let (_, done_topics, _) = events.get(n - 1).unwrap();
-        assert_eq!(done_topics, vec![&env, symbol_short!("s_done").into_val(&env), id.into_val(&env)]);
+        assert_eq!(
+            done_topics,
+            vec![
+                &env,
+                symbol_short!("s_done").into_val(&env),
+                id.into_val(&env)
+            ]
+        );
     }
 
     #[test]
@@ -834,15 +937,24 @@ mod tests {
         at(&env, T0 + DURATION + 5);
         setup.client.withdraw(&id);
         at(&env, T0 + DURATION + 50);
-        assert_eq!(setup.client.try_withdraw(&id), Err(Ok(Error::StreamCompleted)));
-        assert_eq!(setup.client.try_toggle_stream(&id), Err(Ok(Error::StreamCompleted)));
+        assert_eq!(
+            setup.client.try_withdraw(&id),
+            Err(Ok(Error::StreamCompleted))
+        );
+        assert_eq!(
+            setup.client.try_toggle_stream(&id),
+            Err(Ok(Error::StreamCompleted))
+        );
     }
 
     #[test]
     fn withdraw_with_nothing_accrued_fails() {
         let env = Env::default();
         let (setup, _, id) = funded_stream(&env);
-        assert_eq!(setup.client.try_withdraw(&id), Err(Ok(Error::NothingToWithdraw)));
+        assert_eq!(
+            setup.client.try_withdraw(&id),
+            Err(Ok(Error::NothingToWithdraw))
+        );
     }
 
     #[test]
@@ -864,7 +976,14 @@ mod tests {
         at(&env, T0 + 10);
         assert_eq!(setup.client.toggle_stream(&id), StreamStatus::Paused);
         let (_, topics, data) = env.events().all().last().unwrap();
-        assert_eq!(topics, vec![&env, symbol_short!("s_toggle").into_val(&env), id.into_val(&env)]);
+        assert_eq!(
+            topics,
+            vec![
+                &env,
+                symbol_short!("s_toggle").into_val(&env),
+                id.into_val(&env)
+            ]
+        );
         let status: StreamStatus = data.into_val(&env);
         assert_eq!(status, StreamStatus::Paused);
 
@@ -920,7 +1039,9 @@ mod tests {
         // the first recipient unable to withdraw later.
         let other = Address::generate(&env);
         assert_eq!(
-            setup.client.try_create_stream(&other, &RATE, &(T0 + DURATION)),
+            setup
+                .client
+                .try_create_stream(&other, &RATE, &(T0 + DURATION)),
             Err(Ok(Error::InsufficientBalance)),
         );
 
@@ -987,7 +1108,10 @@ mod tests {
 
         setup.client.toggle_stream(&id); // paused immediately, nothing ever accrues
         at(&env, T0 + DURATION - 1);
-        assert_eq!(setup.client.try_withdraw(&id), Err(Ok(Error::NothingToWithdraw)));
+        assert_eq!(
+            setup.client.try_withdraw(&id),
+            Err(Ok(Error::NothingToWithdraw))
+        );
 
         at(&env, T0 + DURATION);
         assert_eq!(setup.client.withdraw(&id), 0);
@@ -1008,17 +1132,34 @@ mod tests {
         setup.token_admin.mint(&setup.client.address, &500); // surplus
 
         assert_eq!(setup.client.get_available(), 500);
-        assert_eq!(setup.client.try_reclaim(&treasury, &501), Err(Ok(Error::InsufficientBalance)));
+        assert_eq!(
+            setup.client.try_reclaim(&treasury, &501),
+            Err(Ok(Error::InsufficientBalance))
+        );
         setup.client.reclaim(&treasury, &500);
 
         let (_, topics, data) = env.events().all().last().unwrap();
-        assert_eq!(topics, vec![&env, symbol_short!("reclaim").into_val(&env), setup.admin.into_val(&env)]);
+        assert_eq!(
+            topics,
+            vec![
+                &env,
+                symbol_short!("reclaim").into_val(&env),
+                setup.admin.into_val(&env)
+            ]
+        );
         let data: (Address, i128) = data.into_val(&env);
         assert_eq!(data, (treasury.clone(), 500));
 
         assert_eq!(setup.token.balance(&treasury), 500);
-        assert_eq!(setup.token.balance(&setup.client.address), full, "reserved funds untouched");
-        assert_eq!(setup.client.try_reclaim(&treasury, &1), Err(Ok(Error::InsufficientBalance)));
+        assert_eq!(
+            setup.token.balance(&setup.client.address),
+            full,
+            "reserved funds untouched"
+        );
+        assert_eq!(
+            setup.client.try_reclaim(&treasury, &1),
+            Err(Ok(Error::InsufficientBalance))
+        );
     }
 
     #[test]
@@ -1027,7 +1168,10 @@ mod tests {
         let (setup, _, _) = funded_stream(&env);
         let to = Address::generate(&env);
         for amount in [0i128, -1, i128::MIN] {
-            assert_eq!(setup.client.try_reclaim(&to, &amount), Err(Ok(Error::InvalidAmount)));
+            assert_eq!(
+                setup.client.try_reclaim(&to, &amount),
+                Err(Ok(Error::InvalidAmount))
+            );
         }
         setup.token_admin.mint(&setup.client.address, &10);
         env.set_auths(&[]);
@@ -1063,12 +1207,22 @@ mod tests {
         at(&env, T0 + DURATION + 500);
 
         assert_eq!(setup.client.close_stream(&id), 30 * RATE);
-        assert_eq!(setup.token.balance(&recipient), 30 * RATE, "owed amount goes to the recipient");
+        assert_eq!(
+            setup.token.balance(&recipient),
+            30 * RATE,
+            "owed amount goes to the recipient"
+        );
         assert_eq!(setup.client.get_stream(&id).status, StreamStatus::Completed);
         assert_eq!(setup.client.get_committed(), 0);
         assert_eq!(setup.client.get_available(), RATE * (DURATION as i128 - 30));
-        assert_eq!(setup.client.try_close_stream(&id), Err(Ok(Error::StreamCompleted)));
-        assert_eq!(setup.client.try_withdraw(&id), Err(Ok(Error::StreamCompleted)));
+        assert_eq!(
+            setup.client.try_close_stream(&id),
+            Err(Ok(Error::StreamCompleted))
+        );
+        assert_eq!(
+            setup.client.try_withdraw(&id),
+            Err(Ok(Error::StreamCompleted))
+        );
     }
 
     #[test]
@@ -1076,8 +1230,14 @@ mod tests {
         let env = Env::default();
         let (setup, _, id) = funded_stream(&env);
         at(&env, T0 + DURATION - 1);
-        assert_eq!(setup.client.try_close_stream(&id), Err(Ok(Error::StreamNotEnded)));
-        assert_eq!(setup.client.try_close_stream(&99), Err(Ok(Error::StreamNotFound)));
+        assert_eq!(
+            setup.client.try_close_stream(&id),
+            Err(Ok(Error::StreamNotEnded))
+        );
+        assert_eq!(
+            setup.client.try_close_stream(&99),
+            Err(Ok(Error::StreamNotFound))
+        );
     }
 
     #[test]
@@ -1089,15 +1249,27 @@ mod tests {
         assert!(setup.client.try_close_stream(&id).is_err());
     }
 
-        #[test]
+    #[test]
     fn unknown_stream_ids_fail() {
         let env = Env::default();
         env.mock_all_auths();
         let setup = deploy(&env);
-        assert_eq!(setup.client.try_get_stream(&7), Err(Ok(Error::StreamNotFound)));
-        assert_eq!(setup.client.try_get_accumulated(&7), Err(Ok(Error::StreamNotFound)));
-        assert_eq!(setup.client.try_withdraw(&7), Err(Ok(Error::StreamNotFound)));
-        assert_eq!(setup.client.try_toggle_stream(&7), Err(Ok(Error::StreamNotFound)));
+        assert_eq!(
+            setup.client.try_get_stream(&7),
+            Err(Ok(Error::StreamNotFound))
+        );
+        assert_eq!(
+            setup.client.try_get_accumulated(&7),
+            Err(Ok(Error::StreamNotFound))
+        );
+        assert_eq!(
+            setup.client.try_withdraw(&7),
+            Err(Ok(Error::StreamNotFound))
+        );
+        assert_eq!(
+            setup.client.try_toggle_stream(&7),
+            Err(Ok(Error::StreamNotFound))
+        );
     }
 
     // ── Pagination ───────────────────────────────────────────────────────────
@@ -1107,7 +1279,9 @@ mod tests {
         let env = Env::default();
         env.mock_all_auths();
         let setup = deploy(&env);
-        setup.token_admin.mint(&setup.client.address, &(RATE * DURATION as i128));
+        setup
+            .token_admin
+            .mint(&setup.client.address, &(RATE * DURATION as i128));
         let recipient = Address::generate(&env);
         for _ in 0..3 {
             setup.client.create_stream(&recipient, &1, &(T0 + DURATION));
@@ -1119,8 +1293,14 @@ mod tests {
         assert_eq!(tail.get(0).unwrap().id, 2);
         assert_eq!(setup.client.get_streams(&3, &MAX_PAGE_SIZE).len(), 0);
         assert_eq!(setup.client.get_streams(&u32::MAX, &1).len(), 0);
-        assert_eq!(setup.client.try_get_streams(&0, &0), Err(Ok(Error::InvalidPageSize)));
-        assert_eq!(setup.client.try_get_streams(&0, &(MAX_PAGE_SIZE + 1)), Err(Ok(Error::InvalidPageSize)));
+        assert_eq!(
+            setup.client.try_get_streams(&0, &0),
+            Err(Ok(Error::InvalidPageSize))
+        );
+        assert_eq!(
+            setup.client.try_get_streams(&0, &(MAX_PAGE_SIZE + 1)),
+            Err(Ok(Error::InvalidPageSize))
+        );
         assert_eq!(setup.client.get_all_streams().len(), 3);
     }
 
@@ -1135,7 +1315,14 @@ mod tests {
 
         setup.client.propose_admin(&next);
         let (_, topics, _) = env.events().all().last().unwrap();
-        assert_eq!(topics, vec![&env, symbol_short!("adm_prop").into_val(&env), setup.admin.into_val(&env)]);
+        assert_eq!(
+            topics,
+            vec![
+                &env,
+                symbol_short!("adm_prop").into_val(&env),
+                setup.admin.into_val(&env)
+            ]
+        );
         assert_eq!(setup.client.get_admin(), setup.admin);
 
         setup.client.accept_admin();
@@ -1147,7 +1334,10 @@ mod tests {
     fn accept_admin_requires_nominee_auth_and_a_nomination() {
         let env = Env::default();
         let setup = deploy(&env);
-        assert_eq!(setup.client.try_accept_admin(), Err(Ok(Error::NoPendingAdmin)));
+        assert_eq!(
+            setup.client.try_accept_admin(),
+            Err(Ok(Error::NoPendingAdmin))
+        );
 
         env.mock_all_auths();
         setup.client.propose_admin(&Address::generate(&env));
@@ -1157,6 +1347,9 @@ mod tests {
 
         env.mock_all_auths();
         setup.client.cancel_admin_transfer();
-        assert_eq!(setup.client.try_accept_admin(), Err(Ok(Error::NoPendingAdmin)));
+        assert_eq!(
+            setup.client.try_accept_admin(),
+            Err(Ok(Error::NoPendingAdmin))
+        );
     }
 }

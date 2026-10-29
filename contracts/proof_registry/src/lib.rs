@@ -1,7 +1,7 @@
 #![no_std]
 use soroban_sdk::{
-    contract, contracterror, contractimpl, contracttype, symbol_short,
-    Address, BytesN, Env, Symbol, Vec,
+    contract, contracterror, contractimpl, contracttype, symbol_short, Address, BytesN, Env,
+    Symbol, Vec,
 };
 
 // ── Storage keys ──────────────────────────────────────────────────────────────
@@ -138,7 +138,11 @@ impl ProofRegistryContract {
         if !is_valid_proof_type(&env, &proof_type) {
             return Err(Error::InvalidProofType);
         }
-        if env.storage().persistent().has(&DataKey::HashIndex(proof_hash.clone())) {
+        if env
+            .storage()
+            .persistent()
+            .has(&DataKey::HashIndex(proof_hash.clone()))
+        {
             return Err(Error::AlreadyRegistered);
         }
 
@@ -157,9 +161,7 @@ impl ProofRegistryContract {
             submitter: submitter.clone(),
         };
 
-        env.storage()
-            .persistent()
-            .set(&DataKey::Proof(id), &entry);
+        env.storage().persistent().set(&DataKey::Proof(id), &entry);
         env.storage()
             .persistent()
             .set(&DataKey::HashIndex(proof_hash.clone()), &id);
@@ -207,7 +209,11 @@ impl ProofRegistryContract {
         let end = start.saturating_add(limit).min(count);
         let mut proofs = Vec::new(&env);
         for i in start..end {
-            if let Some(p) = env.storage().persistent().get::<DataKey, ProofEntry>(&DataKey::Proof(i)) {
+            if let Some(p) = env
+                .storage()
+                .persistent()
+                .get::<DataKey, ProofEntry>(&DataKey::Proof(i))
+            {
                 proofs.push_back(p);
             }
         }
@@ -272,9 +278,12 @@ impl ProofRegistryContract {
     pub fn propose_admin(env: Env, new_admin: Address) {
         let admin = admin(&env);
         admin.require_auth();
-        env.storage().instance().set(&DataKey::PendingAdmin, &new_admin);
+        env.storage()
+            .instance()
+            .set(&DataKey::PendingAdmin, &new_admin);
         bump_instance(&env);
-        env.events().publish((symbol_short!("adm_prop"), admin), new_admin);
+        env.events()
+            .publish((symbol_short!("adm_prop"), admin), new_admin);
     }
 
     /// Step 2 (nominee): accept the admin role. Requires the nominee's auth.
@@ -292,7 +301,8 @@ impl ProofRegistryContract {
         env.storage().instance().set(&DataKey::Admin, &pending);
         env.storage().instance().remove(&DataKey::PendingAdmin);
         bump_instance(&env);
-        env.events().publish((symbol_short!("adm_acpt"), pending), previous);
+        env.events()
+            .publish((symbol_short!("adm_acpt"), pending), previous);
         Ok(())
     }
 
@@ -310,7 +320,8 @@ impl ProofRegistryContract {
             .ok_or(Error::NoPendingAdmin)?;
         env.storage().instance().remove(&DataKey::PendingAdmin);
         bump_instance(&env);
-        env.events().publish((symbol_short!("adm_cncl"), admin), pending);
+        env.events()
+            .publish((symbol_short!("adm_cncl"), admin), pending);
         Ok(())
     }
 
@@ -360,7 +371,11 @@ mod tests {
         env.as_contract(&client.address, || {
             let max = env.storage().max_ttl();
             assert_eq!(env.storage().instance().get_ttl(), INSTANCE_TTL_EXTEND);
-            for key in [DataKey::Proof(0), DataKey::HashIndex(hash(&env, 0)), DataKey::ProofCount] {
+            for key in [
+                DataKey::Proof(0),
+                DataKey::HashIndex(hash(&env, 0)),
+                DataKey::ProofCount,
+            ] {
                 assert_eq!(env.storage().persistent().get_ttl(&key), max);
             }
         });
@@ -386,7 +401,14 @@ mod tests {
         client.register_proof(&admin, &hash(&env, 7), &hash(&env, 8), &payroll(&env));
         let (contract, topics, data) = env.events().all().last().unwrap();
         assert_eq!(contract, client.address);
-        assert_eq!(topics, vec![&env, symbol_short!("p_reg").into_val(&env), admin.into_val(&env)]);
+        assert_eq!(
+            topics,
+            vec![
+                &env,
+                symbol_short!("p_reg").into_val(&env),
+                admin.into_val(&env)
+            ]
+        );
         let data: (u32, BytesN<32>, BytesN<32>, Symbol) = data.into_val(&env);
         assert_eq!(data, (0, hash(&env, 7), hash(&env, 8), payroll(&env)));
     }
@@ -416,7 +438,8 @@ mod tests {
         let (client, _admin) = deploy(&env);
 
         let outsider = Address::generate(&env);
-        let res = client.try_register_proof(&outsider, &hash(&env, 0), &hash(&env, 1), &payroll(&env));
+        let res =
+            client.try_register_proof(&outsider, &hash(&env, 0), &hash(&env, 1), &payroll(&env));
         assert_eq!(res, Err(Ok(Error::NotAdmin)));
     }
 
@@ -426,7 +449,12 @@ mod tests {
         env.mock_all_auths();
         let (client, admin) = deploy(&env);
 
-        let res = client.try_register_proof(&admin, &hash(&env, 0), &hash(&env, 1), &Symbol::new(&env, "bonus"));
+        let res = client.try_register_proof(
+            &admin,
+            &hash(&env, 0),
+            &hash(&env, 1),
+            &Symbol::new(&env, "bonus"),
+        );
         assert_eq!(res, Err(Ok(Error::InvalidProofType)));
         assert_eq!(client.get_proof_count(), 0);
     }
@@ -483,8 +511,14 @@ mod tests {
     fn unknown_proof_lookups_return_proof_not_found() {
         let env = Env::default();
         let (client, _) = deploy(&env);
-        assert_eq!(client.try_get_proof_by_hash(&hash(&env, 1)), Err(Ok(Error::ProofNotFound)));
-        assert_eq!(client.try_get_id_by_hash(&hash(&env, 1)), Err(Ok(Error::ProofNotFound)));
+        assert_eq!(
+            client.try_get_proof_by_hash(&hash(&env, 1)),
+            Err(Ok(Error::ProofNotFound))
+        );
+        assert_eq!(
+            client.try_get_id_by_hash(&hash(&env, 1)),
+            Err(Ok(Error::ProofNotFound))
+        );
         assert_eq!(client.try_get_proof(&0), Err(Ok(Error::ProofNotFound)));
     }
 
@@ -521,8 +555,14 @@ mod tests {
     fn get_proofs_rejects_bad_page_sizes() {
         let env = Env::default();
         let (client, _) = deploy(&env);
-        assert_eq!(client.try_get_proofs(&0, &0), Err(Ok(Error::InvalidPageSize)));
-        assert_eq!(client.try_get_proofs(&0, &(MAX_PAGE_SIZE + 1)), Err(Ok(Error::InvalidPageSize)));
+        assert_eq!(
+            client.try_get_proofs(&0, &0),
+            Err(Ok(Error::InvalidPageSize))
+        );
+        assert_eq!(
+            client.try_get_proofs(&0, &(MAX_PAGE_SIZE + 1)),
+            Err(Ok(Error::InvalidPageSize))
+        );
     }
 
     // ── Two-step admin transfer ──────────────────────────────────────────────
@@ -535,7 +575,11 @@ mod tests {
         let next = Address::generate(&env);
 
         client.propose_admin(&next);
-        assert_eq!(client.get_admin(), admin, "proposal alone must not change admin");
+        assert_eq!(
+            client.get_admin(),
+            admin,
+            "proposal alone must not change admin"
+        );
         assert_eq!(client.get_pending_admin(), Some(next.clone()));
 
         client.accept_admin();
@@ -568,7 +612,10 @@ mod tests {
         env.mock_all_auths();
         let (client, _) = deploy(&env);
         assert_eq!(client.try_accept_admin(), Err(Ok(Error::NoPendingAdmin)));
-        assert_eq!(client.try_cancel_admin_transfer(), Err(Ok(Error::NoPendingAdmin)));
+        assert_eq!(
+            client.try_cancel_admin_transfer(),
+            Err(Ok(Error::NoPendingAdmin))
+        );
     }
 
     #[test]
@@ -593,13 +640,27 @@ mod tests {
 
         client.propose_admin(&next);
         let (_, topics, data) = env.events().all().last().unwrap();
-        assert_eq!(topics, vec![&env, symbol_short!("adm_prop").into_val(&env), admin.into_val(&env)]);
+        assert_eq!(
+            topics,
+            vec![
+                &env,
+                symbol_short!("adm_prop").into_val(&env),
+                admin.into_val(&env)
+            ]
+        );
         let nominee: Address = data.into_val(&env);
         assert_eq!(nominee, next);
 
         client.accept_admin();
         let (_, topics, data) = env.events().all().last().unwrap();
-        assert_eq!(topics, vec![&env, symbol_short!("adm_acpt").into_val(&env), next.into_val(&env)]);
+        assert_eq!(
+            topics,
+            vec![
+                &env,
+                symbol_short!("adm_acpt").into_val(&env),
+                next.into_val(&env)
+            ]
+        );
         let previous: Address = data.into_val(&env);
         assert_eq!(previous, admin);
     }
