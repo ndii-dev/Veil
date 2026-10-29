@@ -323,8 +323,13 @@ async function submitRegisterProof(
     throw new Error(`register_proof transaction ${sent.hash} did not succeed: ${final.status}`);
   }
 
+  // register_proof returns the new u32 id; without it the caller would get
+  // proofId: null in a 201, so treat a missing value as a failure.
+  if (!final.returnValue) {
+    throw new Error(`register_proof transaction ${sent.hash} succeeded but returned no proof id`);
+  }
   return {
-    proofId: Number(final.returnValue ? scValToNative(final.returnValue) : NaN),
+    proofId: Number(scValToNative(final.returnValue)),
     txHash: sent.hash,
   };
 }
