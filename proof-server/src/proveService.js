@@ -77,12 +77,17 @@ function validateProveInput({ recipientId, amount, proofType, allowlist, budgetC
     );
   }
 
+  // The circuit compares these as u128 (see AUSTINS_TASK #17).
+  const amountValue = parseField("amount", amount, { maxBits: 128 });
+  // treasury_vault::disburse rejects amount <= 0, so a zero-amount proof
+  // could never pay out; don't spend a proof and an anchoring fee on it.
+  if (amountValue === "0") throw new ValidationError("amount must be greater than 0");
+
   return {
     proofType,
     allowlist: ids,
     recipientId: recipient,
-    // The circuit compares these as u128 (see AUSTINS_TASK #17).
-    amount: parseField("amount", amount, { maxBits: 128 }),
+    amount: amountValue,
     budgetCap: parseField("budgetCap", budgetCap, { maxBits: 128 }),
     budgetSalt: salt,
   };

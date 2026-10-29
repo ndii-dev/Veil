@@ -59,6 +59,12 @@ test("rejects values that would silently wrap modulo the field", () => {
   );
 });
 
+test("amount must be positive, since disburse() rejects zero", () => {
+  rejects({ amount: "0" }, /amount must be greater than 0/);
+  rejects({ amount: 0 }, /amount must be greater than 0/);
+  rejects({ amount: "0x0" }, /amount must be greater than 0/);
+});
+
 test("amount and budgetCap must fit in u128", () => {
   rejects({ amount: (1n << 128n).toString() }, /amount must be less than 2\^128/);
   rejects({ budgetCap: (1n << 200n).toString() }, /budgetCap must be less than 2\^128/);
