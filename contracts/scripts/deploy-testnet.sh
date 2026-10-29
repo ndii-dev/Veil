@@ -21,6 +21,10 @@
 
 set -euo pipefail
 
+# Build paths below are relative to the Cargo workspace, so run from there
+# whatever directory the script was started in.
+cd "$(dirname "$0")/.."
+
 NETWORK="${NETWORK:-testnet}"
 
 # Circle's testnet USDC Stellar Asset Contract:
