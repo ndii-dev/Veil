@@ -165,6 +165,14 @@ describe('streams & treasury', () => {
     expect(stellar.getVaultBalance).not.toHaveBeenCalled();
   });
 
+  it('returns nextCursor so clients can page through transactions', async () => {
+    mocked(stellar.getContractEvents).mockResolvedValueOnce({ events: [], nextCursor: '0001-0002' });
+    const res = await request(app).get('/api/treasury/default/transactions?limit=5&cursor=0000-0001');
+    expect(res.status).toBe(200);
+    expect(res.body).toMatchObject({ limit: 5, cursor: '0000-0001', nextCursor: '0001-0002' });
+    expect(stellar.getContractEvents).toHaveBeenCalledWith(process.env.TREASURY_VAULT_CONTRACT_ID, 5, '0000-0001');
+  });
+
   it('resolves "default" to the configured vault', async () => {
     const res = await request(app).get('/api/treasury/default/stats');
     expect(res.status).toBe(200);

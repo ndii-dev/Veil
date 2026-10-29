@@ -260,7 +260,7 @@ curl http://localhost:4000/api/campaigns/1
 |--------|------|-------------|
 | `GET` | `/api/treasury/:contractId/balance` | Live token balance (stroops). Use `default` for the configured vault. |
 | `GET` | `/api/treasury/:contractId/stats` | `{ vaultBalance, totalRaised, totalDisbursed }` |
-| `GET` | `/api/treasury/:contractId/transactions?limit=20&cursor=` | Horizon contract event log, paginated |
+| `GET` | `/api/treasury/:contractId/transactions?limit=20&cursor=` | Contract event log (Soroban RPC `getEvents`), paginated: pass the returned `nextCursor` as `?cursor=` for the next page |
 
 ### Campaigns
 

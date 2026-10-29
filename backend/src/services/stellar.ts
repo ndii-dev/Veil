@@ -83,14 +83,19 @@ export async function getContractEvents(contractId: string, limit: number, curso
     response = await server.getEvents({ filters, limit, startLedger });
   }
 
-  return response.events.map(e => ({
-    id: e.id,
-    type: e.type,
-    ledger: e.ledger,
-    timestamp: e.ledgerClosedAt,
-    topic: e.topic.map(t => scValToNative(t)),
-    value: scValToNative(e.value),
-  }));
+  return {
+    events: response.events.map(e => ({
+      id: e.id,
+      type: e.type,
+      ledger: e.ledger,
+      timestamp: e.ledgerClosedAt,
+      txHash: e.txHash,
+      topic: e.topic.map(t => scValToNative(t)),
+      value: scValToNative(e.value),
+    })),
+    // Pass back as ?cursor= to read the next page.
+    nextCursor: response.cursor || null,
+  };
 }
 
 // ── Paginated reads ───────────────────────────────────────────────────────────

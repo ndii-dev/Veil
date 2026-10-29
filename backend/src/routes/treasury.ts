@@ -59,8 +59,8 @@ treasuryRouter.get('/:contractId/transactions', async (req, res, next) => {
       return;
     }
 
-    const transactions = await getContractEvents(contractId, limit, cursor);
-    res.json({ contractId, transactions, limit, cursor: cursor ?? null });
+    const { events, nextCursor } = await getContractEvents(contractId, limit, cursor);
+    res.json({ contractId, transactions: events, limit, cursor: cursor ?? null, nextCursor });
   } catch (err) {
     next(err);
   }
