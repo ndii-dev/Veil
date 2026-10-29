@@ -265,7 +265,7 @@ function serialized<T>(task: () => Promise<T>): Promise<T> {
   return run;
 }
 
-// proof_registry::Error codes (see shieldfund-contracts README → Errors).
+// proof_registry::Error codes (see contracts/proof_registry/src/lib.rs).
 const REGISTRY_NOT_ADMIN = 1;
 const REGISTRY_ALREADY_REGISTERED = 2;
 

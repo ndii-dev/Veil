@@ -87,7 +87,7 @@ function toCircuitInputs(inputs) {
 // proof_type_id), then generates an UltraHonk proof with `bb prove` and
 // locally verifies it with `bb verify` before returning. Mirrors the "proof
 // server generates and locally verifies" design described in
-// shieldfund-contracts' proof_registry.
+// contracts/proof_registry.
 async function provePayrollCompliance(inputs) {
   const { noir } = await loadCircuit();
   return proofSlot(async () => {

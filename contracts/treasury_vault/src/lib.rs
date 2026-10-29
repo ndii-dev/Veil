@@ -84,7 +84,7 @@ fn proof_type_id(env: &Env, proof_type: &Symbol) -> Result<u32, Error> {
 
 /// The circuit's `recipient_id` for a Stellar address: keccak256 of the
 /// strkey's UTF-8 bytes, reduced into the field. Matches
-/// `addressToField()` in shieldfund-proof-server/src/hash.js.
+/// `addressToField()` in proof-server/src/hash.js.
 fn recipient_field(env: &Env, recipient: &Address) -> Result<BytesN<32>, Error> {
     let strkey = recipient.to_string();
     let mut buf = [0u8; 56];
@@ -109,7 +109,7 @@ fn field_bytes(env: &Env, value: &U256) -> BytesN<32> {
 
 /// keccak256 over the circuit's public inputs in declaration order, each as
 /// a 32-byte big-endian field element. Matches `hashPublicInputs()` in
-/// shieldfund-proof-server/src/hash.js, so it equals the `public_inputs_hash`
+/// proof-server/src/hash.js, so it equals the `public_inputs_hash`
 /// the proof server returns for a proof of exactly this payment.
 fn public_inputs_hash(
     env: &Env,
@@ -498,7 +498,7 @@ mod tests {
         BytesN::from_array(env, &out)
     }
 
-    // Test vectors produced by shieldfund-proof-server/src/hash.js
+    // Test vectors produced by proof-server/src/hash.js
     // (hashPublicInputs / addressToField) for merkle_root = 0x11..11 and
     // budget_commitment = 0x22..22.
     //

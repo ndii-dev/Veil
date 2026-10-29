@@ -14,7 +14,7 @@ export interface ProveRequest {
 
 const hex32 = z.string().regex(/^0x[0-9a-fA-F]{64}$/);
 
-// shieldfund-proof-server only returns a proof after `bb verify` accepts it.
+// The proof server only returns a proof after `bb verify` accepts it.
 const proveResponseSchema = z.object({
   valid: z.literal(true),
   proofType: z.enum(['payroll', 'operational', 'relief']),

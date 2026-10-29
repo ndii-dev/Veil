@@ -16,7 +16,7 @@ const MAX_ALLOWLIST_SIZE = 2 ** MERKLE_DEPTH;
 
 // Must match circuits/payroll_compliance's proof_type_id encoding, and the
 // proof_type Symbol values ("payroll" | "operational" | "relief") that
-// shieldfund-contracts' proof_registry stores.
+// contracts/proof_registry stores.
 const PROOF_TYPES = { payroll: 0, operational: 1, relief: 2 };
 
 function intEnv(name, fallback) {

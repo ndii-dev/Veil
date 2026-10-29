@@ -90,7 +90,7 @@ function validateProveInput({ recipientId, amount, proofType, allowlist, budgetC
 
 // End-to-end: build the allowlist Merkle tree, commit to the budget,
 // generate + locally verify a payroll_compliance proof, then anchor-hash it
-// the same way shieldfund-contracts' proof_registry expects
+// the same way contracts/proof_registry expects
 // (proof_hash / public_inputs_hash as BytesN<32>, proof_type as a Symbol).
 async function proveAndAnchor(input) {
   const { recipientId, amount, proofType, allowlist, budgetCap, budgetSalt } = validateProveInput(input);

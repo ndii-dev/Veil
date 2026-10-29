@@ -73,7 +73,7 @@ export const config = {
   },
 
   proofs: {
-    // shieldfund-proof-server base URL — generates and `bb verify`s proofs.
+    // Proof server (proof-server/) base URL — generates and `bb verify`s proofs.
     serverUrl: optional('PROOF_SERVER_URL', 'http://localhost:4100'),
     serverTimeoutMs: int('PROOF_SERVER_TIMEOUT_MS', 120_000, 1),
     // One of the proof server's PROVE_API_KEYS, sent as X-API-Key. The proof
