@@ -1,6 +1,6 @@
 # ShieldFund Proof Server
 
-The missing piece referenced in [`shieldfund-contracts`](https://github.com/Crowder-Stellar/shieldfund-contracts)'s
+The missing piece referenced in [`contracts`](../contracts)'s
 `proof_registry` circuit doc comments:
 
 > Called by the proof backend after successfully generating and locally
@@ -252,7 +252,7 @@ real proofs) on every PR.
 
 ## Security
 
-Please report vulnerabilities privately as described in [`SECURITY.md`](SECURITY.md) — never in a public
+Please report vulnerabilities privately as described in [`SECURITY.md`](../SECURITY.md) — never in a public
 issue.
 
 What the server does to protect itself and its callers:

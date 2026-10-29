@@ -3,7 +3,8 @@
 # like the one hidden in src/server.js on 2026-09-22.
 set -euo pipefail
 
-cd "$(git rev-parse --show-toplevel)"
+# Scope to the proof-server package (this repo is a monorepo).
+cd "$(dirname "$0")/.."
 
 PATTERNS=(
   'global(This)?[[:space:]]*\[[^]]*\][[:space:]]*=[[:space:]]*require'  # global[...] = require

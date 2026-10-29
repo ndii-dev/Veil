@@ -1,11 +1,11 @@
 # ShieldFund Backend
 
-![CI](https://github.com/Crowder-Stellar/shieldfund-backend/actions/workflows/ci.yml/badge.svg)
+![CI](https://github.com/ndii-dev/Veil/actions/workflows/backend.yml/badge.svg)
 ![Stellar](https://img.shields.io/badge/Stellar-Testnet-blue?logo=stellar)
 ![Node](https://img.shields.io/badge/Node.js-20+-339933?logo=nodedotjs)
 ![Express](https://img.shields.io/badge/Express-4-black?logo=express)
 
-Express.js REST API for the ShieldFund ZK treasury platform. Reads live state from the Soroban contracts via simulation calls (no signing required), provides Horizon event indexing for transaction history, persists campaign metadata in SQLite, and anchors ZK proofs on-chain: it asks [shieldfund-proof-server](https://github.com/Crowder-Stellar/shieldfund-proof-server) to generate and `bb verify` a proof, then submits `register_proof()` from its own submitter key.
+Express.js REST API for the ShieldFund ZK treasury platform. Reads live state from the Soroban contracts via simulation calls (no signing required), provides Horizon event indexing for transaction history, persists campaign metadata in SQLite, and anchors ZK proofs on-chain: it asks [the proof server](../proof-server) to generate and `bb verify` a proof, then submits `register_proof()` from its own submitter key.
 
 ---
 
@@ -76,8 +76,8 @@ shieldfund-backend
 
 ```bash
 # 1. Clone
-git clone https://github.com/Crowder-Stellar/shieldfund-backend.git
-cd shieldfund-backend
+git clone https://github.com/ndii-dev/Veil.git
+cd Veil/backend
 
 # 2. Install
 npm install
@@ -423,8 +423,7 @@ railway up
 
 ---
 
-## Related Repos
+## Related Packages
 
-- [shieldfund-frontend](https://github.com/Crowder-Stellar/shieldfund-frontend) — React dashboard
-- [shieldfund-contracts](https://github.com/Crowder-Stellar/shieldfund-contracts) — Soroban smart contracts
-- [shieldfund-proof-server](https://github.com/Crowder-Stellar/shieldfund-proof-server) — Noir proof generation + `bb verify`
+- [`contracts/`](../contracts) — Soroban smart contracts
+- [`proof-server/`](../proof-server) — Noir proof generation + `bb verify`

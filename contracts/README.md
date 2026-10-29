@@ -1,6 +1,6 @@
 # ShieldFund Contracts
 
-![CI](https://github.com/Crowder-Stellar/shieldfund-contracts/actions/workflows/ci.yml/badge.svg)
+![CI](https://github.com/ndii-dev/Veil/actions/workflows/contracts.yml/badge.svg)
 ![Stellar](https://img.shields.io/badge/Stellar-Testnet-blue?logo=stellar)
 ![Rust](https://img.shields.io/badge/Rust-1.96-orange?logo=rust)
 ![Soroban SDK](https://img.shields.io/badge/Soroban%20SDK-22-blueviolet)
@@ -404,7 +404,7 @@ GitHub Actions on every push and PR:
 
 ---
 
-## Related Repos
+## Related Packages
 
-- [shieldfund-frontend](https://github.com/Crowder-Stellar/shieldfund-frontend) — React dashboard (paste contract IDs here)
-- [shieldfund-backend](https://github.com/Crowder-Stellar/shieldfund-backend) — Express API for off-chain indexing
+- [`backend/`](../backend) — Express API for off-chain indexing
+- [`proof-server/`](../proof-server) — Noir proof generation + `bb verify`

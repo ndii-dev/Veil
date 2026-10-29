@@ -1,10 +1,20 @@
-name: CI
+name: Contracts
 
 on:
   push:
     branches: [main]
+    paths:
+      - 'contracts/**'
+      - '.github/workflows/contracts.yml'
   pull_request:
     branches: [main]
+    paths:
+      - 'contracts/**'
+      - '.github/workflows/contracts.yml'
+
+defaults:
+  run:
+    working-directory: contracts
 
 jobs:
   test:
@@ -25,7 +35,7 @@ jobs:
           path: |
             ~/.cargo/registry
             ~/.cargo/git
-            target/
+            contracts/target/
           key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: ${{ runner.os }}-cargo-
 
@@ -51,7 +61,7 @@ jobs:
           path: |
             ~/.cargo/registry
             ~/.cargo/git
-            target/
+            contracts/target/
           key: ${{ runner.os }}-cargo-wasm-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: ${{ runner.os }}-cargo-
 
@@ -62,5 +72,5 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: wasm-contracts
-          path: target/wasm32-unknown-unknown/release/*.wasm
+          path: contracts/target/wasm32-unknown-unknown/release/*.wasm
           retention-days: 7

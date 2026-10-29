@@ -8,7 +8,7 @@ Report privately through GitHub:
 
 1. Go to the repository's **Security** tab.
 2. Click **Report a vulnerability**
-   (direct link: <https://github.com/Crowder-Stellar/shieldfund-proof-server/security/advisories/new>).
+   (direct link: <https://github.com/ndii-dev/Veil/security/advisories/new>).
 3. Describe the issue, the affected file(s) or endpoint, and steps or a proof of concept to reproduce it.
 
 Only the maintainers can see the report. If you can't use GitHub's private reporting, open a public issue

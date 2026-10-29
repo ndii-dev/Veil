@@ -1,0 +1,9 @@
+# Changes to these paths need a code-owner review before merging into main
+# (enforced when "Require review from Code Owners" is on in branch protection).
+
+*                       @ndii-dev
+
+# CI and the proof-server guard scripts (whitespace-padding, obfuscation):
+# weakening them weakens CI.
+/.github/               @ndii-dev
+/proof-server/scripts/  @ndii-dev

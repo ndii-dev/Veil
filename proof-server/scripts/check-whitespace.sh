@@ -8,7 +8,8 @@ set -euo pipefail
 MAX_LINE=300
 MAX_TRAILING=20
 
-cd "$(git rev-parse --show-toplevel)"
+# Scope to the proof-server package (this repo is a monorepo).
+cd "$(dirname "$0")/.."
 
 # -I skips binary files; -l lists text files only.
 git ls-files -z | xargs -0 grep -IlZ '' -- 2>/dev/null \
