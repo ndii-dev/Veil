@@ -10,7 +10,7 @@ import { campaignsRouter } from './routes/campaigns.js';
 import { proofsRouter } from './routes/proofs.js';
 import { streamsRouter } from './routes/streams.js';
 import { errorHandler } from './middleware/errorHandler.js';
-import { writeLimiter } from './middleware/rateLimit.js';
+import { readLimiter, writeLimiter } from './middleware/rateLimit.js';
 
 // The Express app, without listening — imported by src/index.ts and the tests.
 export const app = express();
@@ -31,6 +31,7 @@ app.get('/health', (_req, res) => {
   res.json({ status: 'ok', network: config.stellar.network });
 });
 
+app.use('/api', readLimiter);
 app.use('/api/treasury', treasuryRouter);
 app.use('/api/campaigns', campaignsRouter);
 app.use('/api/proofs', proofsRouter);

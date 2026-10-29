@@ -309,6 +309,7 @@ old `get_all_*` getters, so the API behaves the same against either deployment.
 | `ADMIN_API_KEY` | — | Bearer token for admin write routes. Unset = those routes return `503`. |
 | `WRITE_RATE_LIMIT_WINDOW_MS` | `900000` | Rate-limit window for write routes |
 | `WRITE_RATE_LIMIT_MAX` | `30` | Max write requests per IP per window |
+| `READ_RATE_LIMIT_MAX` | `300` | Max `/api` read requests per IP per minute |
 | `PROOF_SERVER_URL` | `http://localhost:4100` | shieldfund-proof-server base URL |
 | `PROOF_SERVER_TIMEOUT_MS` | `120000` | Timeout for proof generation |
 | `PROOF_SUBMITTER_SECRET` | — | Secret seed of the dedicated key that signs `register_proof()`; must be the registry admin |

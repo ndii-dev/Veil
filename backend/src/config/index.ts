@@ -56,6 +56,9 @@ export const config = {
   rateLimit: {
     windowMs: int('WRITE_RATE_LIMIT_WINDOW_MS', 15 * 60 * 1000, 1),
     max: int('WRITE_RATE_LIMIT_MAX', 30, 1),
+    // Reads fan out to Soroban RPC simulations, so they are limited too,
+    // just far more generously (per IP, per minute).
+    readMax: int('READ_RATE_LIMIT_MAX', 300, 1),
   },
 
   stellar: {

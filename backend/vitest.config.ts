@@ -12,6 +12,7 @@ export default defineConfig({
       CORS_ORIGINS: 'https://app.example',
       DB_PATH: ':memory:',
       WRITE_RATE_LIMIT_MAX: '1000',
+      READ_RATE_LIMIT_MAX: '1000',
       PROOF_SERVER_URL: 'http://proof.test',
       PROOF_SERVER_API_KEY: 'test-prove-key',
       PROOF_REGISTRY_CONTRACT_ID: 'CBDLHQQPKC5524CFWPD4HMPTZGWBYQNW3IKGAFH6IAYBU3F2F6AO2332',
