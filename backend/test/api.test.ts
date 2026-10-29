@@ -143,6 +143,14 @@ describe('proofs', () => {
     expect(proofServer.proveWithProofServer).not.toHaveBeenCalled();
   });
 
+  it('rejects allowlists the proof server would refuse', async () => {
+    for (const allowlist of [['42', '0x2a'], ['42', '0']]) {
+      const res = await request(app).post('/api/proofs').set(ADMIN).send({ ...input, allowlist });
+      expect(res.status).toBe(400);
+    }
+    expect(proofServer.proveWithProofServer).not.toHaveBeenCalled();
+  });
+
   it('rejects a zero amount before calling the proof server', async () => {
     for (const amount of ['0', '0x0']) {
       const res = await request(app).post('/api/proofs').set(ADMIN).send({ ...input, amount });

@@ -41,7 +41,12 @@ export const anchorProofBody = z.object({
   // disburse() rejects amount <= 0, so a zero-amount proof is useless.
   amount: field.refine(v => BigInt(v) > 0n, 'must be greater than 0'),
   proofType: z.enum(['payroll', 'operational', 'relief']),
-  allowlist: z.array(field).min(1).max(16),
+  // Same rules the proof server enforces, checked here to fail fast: ids are
+  // compared by value ("42" and "0x2a" collide), and 0 is the Merkle
+  // padding sentinel, so it can never be a real recipient.
+  allowlist: z.array(field).min(1).max(16)
+    .refine(ids => !ids.some(id => BigInt(id) === 0n), 'recipientId 0 is reserved')
+    .refine(ids => new Set(ids.map(id => BigInt(id).toString())).size === ids.length, 'contains duplicate recipientIds'),
   budgetCap: field,
   // Required: the proof server never generates a salt, and rejects small
   // ones (< 2^120) because they would let anyone recover budgetCap.
