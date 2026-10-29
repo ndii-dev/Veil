@@ -14,7 +14,10 @@ export const errorHandler: ErrorRequestHandler = (err, _req, res, next) => {
     return;
   }
 
-  const status = (err as { status?: number }).status ?? 500;
+  // Only trust 4xx/5xx codes; anything else (missing, 200, a string) is a 500.
+  const raw = (err as { status?: unknown; statusCode?: unknown }).status
+    ?? (err as { statusCode?: unknown }).statusCode;
+  const status = typeof raw === 'number' && Number.isInteger(raw) && raw >= 400 && raw <= 599 ? raw : 500;
   if (status >= 500) console.error(err);
 
   // Don't leak internal error messages (RPC URLs, stack details) in production.
