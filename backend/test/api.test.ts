@@ -86,7 +86,7 @@ describe('proofs', () => {
     proofHash: hex32('a1'), publicInputsHash: hex32('b2'), publicInputs: ['0x1'],
     merkleRoot: '0x1', budgetCommitment: '0x2', recipientId: '0x2a', amount: '0x1',
   };
-  const input = { recipientId: '42', amount: '500000', proofType: 'payroll', allowlist: ['42'], budgetCap: '1000000' };
+  const input = { recipientId: '42', amount: '500000', proofType: 'payroll', allowlist: ['42'], budgetCap: '1000000', budgetSalt: '0x' + 'ab'.repeat(31) };
 
   it('lists a page and validates paging params', async () => {
     mocked(stellar.getProofs).mockResolvedValueOnce({ items: [], total: 3 });
@@ -121,6 +121,14 @@ describe('proofs', () => {
     expect(res.status).toBe(400);
     expect(proofServer.proveWithProofServer).not.toHaveBeenCalled();
     expect(stellar.registerProof).not.toHaveBeenCalled();
+  });
+
+  it('requires budgetSalt, which the proof server will not generate', async () => {
+    const { budgetSalt: _omit, ...noSalt } = input;
+    const res = await request(app).post('/api/proofs').set(ADMIN).send(noSalt);
+    expect(res.status).toBe(400);
+    expect(res.body.details.map((d: { path: string }) => d.path)).toContain('budgetSalt');
+    expect(proofServer.proveWithProofServer).not.toHaveBeenCalled();
   });
 
   it('requires admin auth to anchor', async () => {

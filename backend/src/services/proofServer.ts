@@ -9,7 +9,7 @@ export interface ProveRequest {
   proofType: ProofType;
   allowlist: string[];
   budgetCap: string;
-  budgetSalt?: string;
+  budgetSalt: string;
 }
 
 const hex32 = z.string().regex(/^0x[0-9a-fA-F]{64}$/);

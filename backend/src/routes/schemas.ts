@@ -42,5 +42,7 @@ export const anchorProofBody = z.object({
   proofType: z.enum(['payroll', 'operational', 'relief']),
   allowlist: z.array(field).min(1).max(16),
   budgetCap: field,
-  budgetSalt: field.optional(),
+  // Required: the proof server never generates a salt, and rejects small
+  // ones (< 2^120) because they would let anyone recover budgetCap.
+  budgetSalt: field,
 }).strict();

@@ -188,7 +188,7 @@ curl -X POST http://localhost:4000/api/proofs \
     "proofType": "payroll",
     "allowlist": ["42", "43", "44"],
     "budgetCap": "1000000",
-    "budgetSalt": "777"
+    "budgetSalt": "0x5f3a...e1"
   }'
 ```
 ```json
@@ -208,6 +208,9 @@ The backend forwards the circuit inputs to the proof server, which only returns 
 accepts it. The backend then checks the hash isn't already registered (`409`) and submits
 `proof_registry.register_proof()` signed by `PROOF_SUBMITTER_SECRET`. Clients never send a proof hash.
 If the circuit rejects the inputs (recipient not on the allowlist, amount over budget) the response is `422`.
+
+`budgetSalt` is required. Generate it once per budget (`openssl rand -hex 31`), keep it secret next to
+the cap, and reuse it so every proof against that budget shares one `budgetCommitment`.
 
 > Submissions are serialized in-process, because they all spend from the one submitter account's sequence
 > number and concurrent ones would be rejected (`TRY_AGAIN_LATER` / `txBadSeq`). If you run several backend
@@ -273,7 +276,7 @@ curl http://localhost:4000/api/campaigns/1
 |--------|------|-------------|
 | `GET` | `/api/proofs?start=0&limit=50` | Page of registered proofs (`limit` 1–100) → `{ proofs, total, start, limit }` |
 | `GET` | `/api/proofs/:proofId` | Single proof by sequential ID (direct `get_proof` lookup) |
-| `POST` | `/api/proofs` | **Admin.** Prove via proof server, then anchor with `register_proof()` (body: `{ recipientId, amount, proofType, allowlist, budgetCap, budgetSalt? }`) |
+| `POST` | `/api/proofs` | **Admin.** Prove via proof server, then anchor with `register_proof()` (body: `{ recipientId, amount, proofType, allowlist, budgetCap, budgetSalt }`) |
 
 ### Streams
 
