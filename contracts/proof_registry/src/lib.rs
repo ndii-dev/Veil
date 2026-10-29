@@ -45,12 +45,13 @@ pub const MAX_PAGE_SIZE: u32 = 50;
 
 /// A ZK proof registration anchored on Stellar.
 ///
-/// `proof_hash`        — 32-byte Poseidon/Keccak hash of the full Noir proof
+/// `proof_hash`        — 32-byte keccak256 of the full Noir proof
 ///                       (computed off-chain by the proof server).
-/// `public_inputs_hash`— 32-byte hash of the public inputs used to generate
-///                       the proof. Allows third-party re-verification.
+/// `public_inputs_hash`— 32-byte keccak256 of the proof's public inputs, each
+///                       as a 32-byte field element. treasury_vault recomputes
+///                       it to check a proof matches the payment it pays for.
 /// `proof_type`        — one of: "payroll" | "operational" | "relief"
-///                       (9-char max, stored as Symbol for efficient lookup).
+///                       (stored as a Symbol).
 /// `timestamp`         — ledger Unix timestamp at registration.
 /// `submitter`         — Stellar account that submitted the proof.
 #[contracttype]
